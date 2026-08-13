@@ -955,7 +955,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v8";
+    const storeKey = "vetExamPagesState.v10";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "plan";
     state.subject ||= subjects[0].name;
@@ -963,7 +963,8 @@
     state.answers ||= {};
     state.wrong ||= {};
     state.daily ||= {};
-    state.flow ||= { active: false, subjectIndex: 0, stepIndex: 0, completed: false };
+    state.flow ||= { active: false, subjectIndex: 0, stepIndex: 0, completed: false, pending: null };
+    state.flow.pending ||= null;
     state.exam ||= { subject: null, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
     let reviewTimer = null;
 
@@ -1078,7 +1079,7 @@
     }
 
     function startDailyFlow() {
-      state.flow = { active: true, subjectIndex: 0, stepIndex: 0, completed: false };
+      state.flow = { active: true, subjectIndex: 0, stepIndex: 0, completed: false, pending: null };
       state.subject = subjects[0].name;
       state.tab = "checklist";
       save();
@@ -1091,7 +1092,7 @@
       }
       const subject = subjects[subjectIndex];
       const step = flowSteps[stepIndex];
-      state.flow = { active: true, subjectIndex, stepIndex, completed: false };
+      state.flow = { active: true, subjectIndex, stepIndex, completed: false, pending: null };
       state.subject = subject.name;
       if (step.id === "mock") {
         state.tab = "exam";
@@ -1108,17 +1109,64 @@
       const subject = currentFlowSubject();
       const step = currentFlowStep();
       markDaily(dailyStepId(subject.name, step.id));
-      if (state.flow.stepIndex < flowSteps.length - 1) {
-        goFlowPosition(state.flow.subjectIndex, state.flow.stepIndex + 1);
+      const nextSubjectIndex = state.flow.stepIndex < flowSteps.length - 1 ? state.flow.subjectIndex : state.flow.subjectIndex + 1;
+      const nextStepIndex = state.flow.stepIndex < flowSteps.length - 1 ? state.flow.stepIndex + 1 : 0;
+      state.flow.pending = {
+        subject: subject.name,
+        step: step.label,
+        nextSubjectIndex,
+        nextStepIndex,
+        final: nextSubjectIndex >= subjects.length
+      };
+      save();
+    }
+
+    function confirmFlowJump() {
+      const pending = state.flow.pending;
+      if (!pending) return;
+      if (pending.final) {
+        completeDailyFlow();
       } else {
-        goFlowPosition(state.flow.subjectIndex + 1, 0);
+        goFlowPosition(pending.nextSubjectIndex, pending.nextStepIndex);
       }
+    }
+
+    function flowPendingTitle() {
+      const pending = state.flow.pending;
+      if (!pending) return "";
+      if (pending.final) return "四个科目已全部完成";
+      const subject = subjects[pending.nextSubjectIndex];
+      const step = flowSteps[pending.nextStepIndex];
+      return `下一项：${subject.name} · ${step.label}`;
+    }
+
+    function flowPendingHint() {
+      const pending = state.flow.pending;
+      if (!pending) return "";
+      if (pending.final) return "今天的四科导学流程已经走完，点击后查看今日总结并完成打卡。";
+      return `${pending.subject}的“${pending.step}”已完成。准备好后，点击继续进入下一项。`;
+    }
+
+    function renderFlowPrompt() {
+      return `
+        <div class="result-panel card">
+          <div>
+            <div class="score">完成</div>
+            <h2>${flowPendingTitle()}</h2>
+            <p class="hint">${flowPendingHint()}</p>
+          </div>
+          <div class="actions">
+            <button class="btn primary" onclick="confirmFlowJump()">${state.flow.pending?.final ? "查看今日总结" : "继续下一项"}</button>
+            <button class="btn" onclick="state.tab='plan';state.flow.pending=null;save()">回到今日计划</button>
+          </div>
+        </div>
+      `;
     }
 
     function completeDailyFlow() {
       subjects.forEach(subject => flowSteps.forEach(step => markDaily(dailyStepId(subject.name, step.id))));
       markDaily("today-complete");
-      state.flow = { active: false, subjectIndex: subjects.length - 1, stepIndex: flowSteps.length - 1, completed: true };
+      state.flow = { active: false, subjectIndex: subjects.length - 1, stepIndex: flowSteps.length - 1, completed: true, pending: null };
       state.tab = "plan";
       save();
     }
@@ -1130,6 +1178,20 @@
 
     function currentSubject() {
       return subjects.find(s => s.name === state.subject) || subjects[0];
+    }
+
+    function subjectChecklistDone(subjectName = state.subject) {
+      const subject = subjects.find(s => s.name === subjectName);
+      return Boolean(subject && subject.topics.every(topic => state.checked[subject.name + ":" + topic[0]]));
+    }
+
+    function toggleChecklistPoint(key) {
+      state.checked[key] = !state.checked[key];
+      if (isCurrentFlow("checklist") && subjectChecklistDone(state.subject)) {
+        advanceFlow();
+        return;
+      }
+      save();
     }
 
     function subjectQuestions(name = state.subject) {
@@ -1346,7 +1408,7 @@
             <p class="hint">先把每个知识点按“能讲出来、能做题、能举例”三步过一遍，再进入专题练习。</p>
           </div>
           <div class="actions">
-            <button class="btn primary" onclick="${isCurrentFlow("checklist") ? "advanceFlow()" : "setTab('practice')"}">${isCurrentFlow("checklist") ? "完成清单，进入专题练习" : "开始专题练习"}</button>
+            <button class="btn primary" onclick="${isCurrentFlow("checklist") ? "advanceFlow()" : "setTab('practice')"}">${isCurrentFlow("checklist") ? (subjectChecklistDone(subject.name) ? "清单已完成，进入专题练习" : "完成清单，进入专题练习") : "开始专题练习"}</button>
           </div>
         </div>
         <div class="card">
@@ -1355,7 +1417,7 @@
             const points = highYieldPoints[key] || [];
             return `
               <label class="check-row">
-                <input type="checkbox" ${state.checked[key] ? "checked" : ""} onchange="state.checked['${key}']=this.checked;save()">
+                <input type="checkbox" ${state.checked[key] ? "checked" : ""} onchange="toggleChecklistPoint('${key}')">
                 <span>
                   <b>${title}</b><br>
                   <small>${desc}</small>
@@ -1443,7 +1505,17 @@
           <div class="result-panel card">
             <div>
               <div class="score">已打卡</div>
-              <p class="hint">今天四个科目的知识清单、专题练习、错题复现和小模拟都完成了。稳稳往前走，明天继续加油。</p>
+              <h2>今天练习结束</h2>
+              <p class="hint">四个科目的知识清单、专题练习、错题复现和小模拟都已经完成。今日累计正确率 ${diagnosis.accuracyTotal}%，错题本共 ${wrongList().length} 题。</p>
+              <p class="hint">今天这一轮走完了，稳稳地把基础打厚。明天继续按 40 分钟流程推进，加油。</p>
+            </div>
+            <div class="grid two" style="width:100%">
+              ${subjects.map(subject => `
+                <div class="card">
+                  <h3>${subject.name}</h3>
+                  <p class="hint">知识清单、专题练习、错题复现、小模拟已完成</p>
+                </div>
+              `).join("")}
             </div>
           </div>
         ` : ""}
@@ -1688,9 +1760,13 @@
     }
 
     function render() {
-      document.body.classList.toggle("exam-mode", state.tab === "exam");
+      document.body.classList.toggle("exam-mode", state.tab === "exam" && !state.flow.pending);
       renderChrome();
       const view = document.getElementById("view");
+      if (state.flow.pending) {
+        view.innerHTML = renderFlowPrompt();
+        return;
+      }
       view.innerHTML = {
         plan: renderPlan,
         checklist: renderChecklist,
