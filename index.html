@@ -965,7 +965,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v11";
+    const storeKey = "vetExamPagesState.v12";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "plan";
     state.subject ||= subjects[0].name;
@@ -973,8 +973,7 @@
     state.answers ||= {};
     state.wrong ||= {};
     state.daily ||= {};
-    state.flow ||= { active: false, subjectIndex: 0, stepIndex: 0, completed: false, pending: null };
-    state.flow.pending ||= null;
+    state.flow ||= { active: false, subjectIndex: 0, stepIndex: 0, completed: false };
     state.exam ||= { subject: null, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
     let reviewTimer = null;
 
@@ -1088,8 +1087,17 @@
       return state.flow.active && !state.flow.completed && state.subject === currentFlowSubject().name && (currentFlowStep().tab === tabOrStep || currentFlowStep().id === tabOrStep);
     }
 
+    function nextAfterMockText() {
+      if (!isCurrentFlow("mock")) return "暂时不看";
+      return state.flow.subjectIndex >= subjects.length - 1 ? "不看解析，查看今日总结" : "不看解析，进入下一科";
+    }
+
+    function finishReviewText() {
+      return state.flow.subjectIndex >= subjects.length - 1 ? "完成解析，查看今日总结" : "完成解析，进入下一科";
+    }
+
     function startDailyFlow() {
-      state.flow = { active: true, subjectIndex: 0, stepIndex: 0, completed: false, pending: null };
+      state.flow = { active: true, subjectIndex: 0, stepIndex: 0, completed: false };
       state.subject = subjects[0].name;
       state.tab = "checklist";
       save();
@@ -1102,7 +1110,7 @@
       }
       const subject = subjects[subjectIndex];
       const step = flowSteps[stepIndex];
-      state.flow = { active: true, subjectIndex, stepIndex, completed: false, pending: null };
+      state.flow = { active: true, subjectIndex, stepIndex, completed: false };
       state.subject = subject.name;
       if (step.id === "mock") {
         state.tab = "exam";
@@ -1121,62 +1129,17 @@
       markDaily(dailyStepId(subject.name, step.id));
       const nextSubjectIndex = state.flow.stepIndex < flowSteps.length - 1 ? state.flow.subjectIndex : state.flow.subjectIndex + 1;
       const nextStepIndex = state.flow.stepIndex < flowSteps.length - 1 ? state.flow.stepIndex + 1 : 0;
-      state.flow.pending = {
-        subject: subject.name,
-        step: step.label,
-        nextSubjectIndex,
-        nextStepIndex,
-        final: nextSubjectIndex >= subjects.length
-      };
-      save();
-    }
-
-    function confirmFlowJump() {
-      const pending = state.flow.pending;
-      if (!pending) return;
-      if (pending.final) {
+      if (nextSubjectIndex >= subjects.length) {
         completeDailyFlow();
       } else {
-        goFlowPosition(pending.nextSubjectIndex, pending.nextStepIndex);
+        goFlowPosition(nextSubjectIndex, nextStepIndex);
       }
-    }
-
-    function flowPendingTitle() {
-      const pending = state.flow.pending;
-      if (!pending) return "";
-      if (pending.final) return "四个科目已全部完成";
-      const subject = subjects[pending.nextSubjectIndex];
-      const step = flowSteps[pending.nextStepIndex];
-      return `下一项：${subject.name} · ${step.label}`;
-    }
-
-    function flowPendingHint() {
-      const pending = state.flow.pending;
-      if (!pending) return "";
-      if (pending.final) return "今天的四科导学流程已经走完，点击后查看今日总结并完成打卡。";
-      return `${pending.subject}的“${pending.step}”已完成。准备好后，点击继续进入下一项。`;
-    }
-
-    function renderFlowPrompt() {
-      return `
-        <div class="result-panel card">
-          <div>
-            <div class="score">完成</div>
-            <h2>${flowPendingTitle()}</h2>
-            <p class="hint">${flowPendingHint()}</p>
-          </div>
-          <div class="actions">
-            <button class="btn primary" onclick="confirmFlowJump()">${state.flow.pending?.final ? "查看今日总结" : "继续下一项"}</button>
-            <button class="btn" onclick="state.tab='plan';state.flow.pending=null;save()">回到今日计划</button>
-          </div>
-        </div>
-      `;
     }
 
     function completeDailyFlow() {
       subjects.forEach(subject => flowSteps.forEach(step => markDaily(dailyStepId(subject.name, step.id))));
       markDaily("today-complete");
-      state.flow = { active: false, subjectIndex: subjects.length - 1, stepIndex: flowSteps.length - 1, completed: true, pending: null };
+      state.flow = { active: false, subjectIndex: subjects.length - 1, stepIndex: flowSteps.length - 1, completed: true };
       state.tab = "plan";
       save();
     }
@@ -1718,7 +1681,7 @@
             <h3>需要现在按顺序看解析吗？</h3>
             <div class="actions">
               <button class="btn primary" onclick="startReview()">需要，看解析</button>
-              <button class="btn" onclick="skipReview()">${isCurrentFlow("mock") ? "不看解析，进入下一科" : "暂时不看"}</button>
+              <button class="btn" onclick="skipReview()">${nextAfterMockText()}</button>
             </div>
           </div>
         `;
@@ -1737,7 +1700,7 @@
             ${exam.reviewing ? `
               <div class="actions" style="margin-top:12px;justify-content:space-between">
                 <button class="btn" onclick="moveReview(-1)" ${exam.reviewIndex === 0 ? "disabled" : ""}>上一题解析</button>
-                <button class="btn primary" onclick="${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "advanceFlow()" : "moveReview(1)"}" ${exam.reviewIndex === total - 1 && !isCurrentFlow("mock") ? "disabled" : ""}>${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "完成解析，进入下一科" : "下一题解析"}</button>
+                <button class="btn primary" onclick="${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "advanceFlow()" : "moveReview(1)"}" ${exam.reviewIndex === total - 1 && !isCurrentFlow("mock") ? "disabled" : ""}>${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? finishReviewText() : "下一题解析"}</button>
               </div>
             ` : `
               <div class="bottom-action">
@@ -1776,13 +1739,9 @@
     }
 
     function render() {
-      document.body.classList.toggle("exam-mode", state.tab === "exam" && !state.flow.pending);
+      document.body.classList.toggle("exam-mode", state.tab === "exam");
       renderChrome();
       const view = document.getElementById("view");
-      if (state.flow.pending) {
-        view.innerHTML = renderFlowPrompt();
-        return;
-      }
       view.innerHTML = {
         plan: renderPlan,
         checklist: renderChecklist,
