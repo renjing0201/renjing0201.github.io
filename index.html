@@ -800,7 +800,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v6";
+    const storeKey = "vetExamPagesState.v7";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "plan";
     state.subject ||= subjects[0].name;
@@ -808,12 +808,19 @@
     state.answers ||= {};
     state.wrong ||= {};
     state.daily ||= {};
+    state.flow ||= { active: false, subjectIndex: 0, stepIndex: 0, completed: false };
     state.exam ||= { subject: null, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
     let reviewTimer = null;
 
     const planStart = "2026-08-13";
     const defaultExamDate = "2027-07-11";
     const reviewOffsets = [1, 3, 7, 15, 30];
+    const flowSteps = [
+      { id: "checklist", tab: "checklist", label: "知识清单" },
+      { id: "practice", tab: "practice", label: "专题练习" },
+      { id: "wrong", tab: "wrongbook", label: "错题复现" },
+      { id: "mock", tab: "exam", label: "小模拟考" }
+    ];
 
     function parseDate(value) {
       const [year, month, day] = value.split("-").map(Number);
@@ -886,10 +893,78 @@
       return Boolean(state.daily[key]?.[id]);
     }
 
+    function dailyStepId(subjectName, stepId) {
+      return `${subjectName}-${stepId}`;
+    }
+
     function toggleDaily(id) {
       const key = todaysPlan().today;
       state.daily[key] ||= {};
       state.daily[key][id] = !state.daily[key][id];
+      save();
+    }
+
+    function markDaily(id) {
+      const key = todaysPlan().today;
+      state.daily[key] ||= {};
+      state.daily[key][id] = true;
+    }
+
+    function currentFlowStep() {
+      return flowSteps[state.flow.stepIndex] || flowSteps[0];
+    }
+
+    function currentFlowSubject() {
+      return subjects[state.flow.subjectIndex] || subjects[0];
+    }
+
+    function isCurrentFlow(tabOrStep) {
+      return state.flow.active && !state.flow.completed && state.subject === currentFlowSubject().name && (currentFlowStep().tab === tabOrStep || currentFlowStep().id === tabOrStep);
+    }
+
+    function startDailyFlow() {
+      state.flow = { active: true, subjectIndex: 0, stepIndex: 0, completed: false };
+      state.subject = subjects[0].name;
+      state.tab = "checklist";
+      save();
+    }
+
+    function goFlowPosition(subjectIndex, stepIndex) {
+      if (subjectIndex >= subjects.length) {
+        completeDailyFlow();
+        return;
+      }
+      const subject = subjects[subjectIndex];
+      const step = flowSteps[stepIndex];
+      state.flow = { active: true, subjectIndex, stepIndex, completed: false };
+      state.subject = subject.name;
+      if (step.id === "mock") {
+        state.tab = "exam";
+        clearTimeout(reviewTimer);
+        state.exam = { subject: subject.name, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
+      } else {
+        state.tab = step.tab;
+      }
+      save();
+    }
+
+    function advanceFlow() {
+      if (!state.flow.active || state.flow.completed) return;
+      const subject = currentFlowSubject();
+      const step = currentFlowStep();
+      markDaily(dailyStepId(subject.name, step.id));
+      if (state.flow.stepIndex < flowSteps.length - 1) {
+        goFlowPosition(state.flow.subjectIndex, state.flow.stepIndex + 1);
+      } else {
+        goFlowPosition(state.flow.subjectIndex + 1, 0);
+      }
+    }
+
+    function completeDailyFlow() {
+      subjects.forEach(subject => flowSteps.forEach(step => markDaily(dailyStepId(subject.name, step.id))));
+      markDaily("today-complete");
+      state.flow = { active: false, subjectIndex: subjects.length - 1, stepIndex: flowSteps.length - 1, completed: true };
+      state.tab = "plan";
       save();
     }
 
@@ -1003,6 +1078,11 @@
         const old = state.wrong[index] || { count: 0, last: 0 };
         state.wrong[index] = { count: old.count + 1, last: Date.now() };
       }
+      const allSubjectAnswered = subjectQuestions(state.subject).every(q => state.answers[questions.indexOf(q)] !== undefined);
+      if (isCurrentFlow("practice") && allSubjectAnswered) {
+        advanceFlow();
+        return;
+      }
       save();
     }
 
@@ -1060,9 +1140,13 @@
     }
 
     function skipReview() {
-      state.exam.reviewing = false;
-      state.exam.autoReview = false;
-      save();
+      if (isCurrentFlow("mock")) {
+        advanceFlow();
+      } else {
+        state.exam.reviewing = false;
+        state.exam.autoReview = false;
+        save();
+      }
     }
 
     function moveReview(step) {
@@ -1106,7 +1190,9 @@
             <h2>${subject.name}知识点清单</h2>
             <p class="hint">先把每个知识点按“能讲出来、能做题、能举例”三步过一遍，再进入专题练习。</p>
           </div>
-          <div class="actions"><button class="btn primary" onclick="setTab('practice')">开始专题练习</button></div>
+          <div class="actions">
+            <button class="btn primary" onclick="${isCurrentFlow("checklist") ? "advanceFlow()" : "setTab('practice')"}">${isCurrentFlow("checklist") ? "完成清单，进入专题练习" : "开始专题练习"}</button>
+          </div>
         </div>
         <div class="card">
           ${subject.topics.map(([title, desc]) => {
@@ -1127,6 +1213,7 @@
       const plan = todaysPlan();
       const diagnosis = plan.diagnosis;
       const percent = Math.min(100, Math.round(plan.dayIndex / plan.totalDays * 100));
+      const todayComplete = dailyDone("today-complete");
       const subjectSteps = subjects.flatMap((subject, subjectIndex) => [
         {
           id: `${subject.name}-checklist`,
@@ -1136,7 +1223,7 @@
           minutes: 2,
           desc: `快速过 ${topicForSubject(subject.name, plan.dayIndex + subjectIndex).title}，先确认今天要掌握的点。`,
           action: "去清单",
-          click: `state.subject='${subject.name}';setTab('checklist')`
+          click: `goFlowPosition(${subjectIndex},0)`
         },
         {
           id: `${subject.name}-practice`,
@@ -1146,7 +1233,7 @@
           minutes: 3,
           desc: plan.phase.name === "第一轮" ? "做本学科示例题，错题自动进错题本。" : "按能力画像优先补薄弱知识点。",
           action: "去练习",
-          click: `state.subject='${subject.name}';setTab('practice')`
+          click: `goFlowPosition(${subjectIndex},1)`
         },
         {
           id: `${subject.name}-wrong`,
@@ -1156,7 +1243,7 @@
           minutes: 2,
           desc: wrongList().filter(item => item.q.subject === subject.name).length ? "只复现本科目错题，优先看高频错题。" : "本科目暂无错题，今天做错后会自动沉淀。",
           action: "去错题",
-          click: `state.subject='${subject.name}';setTab('wrongbook')`
+          click: `goFlowPosition(${subjectIndex},2)`
         },
         {
           id: `${subject.name}-mock`,
@@ -1166,7 +1253,7 @@
           minutes: 3,
           desc: "做本科目小模拟，答完自动计分并可顺序看解析。",
           action: "开始模拟",
-          click: `startSubjectExam('${subject.name}')`
+          click: `goFlowPosition(${subjectIndex},3)`
         }
       ]);
 
@@ -1188,10 +1275,18 @@
             <p class="hint">从 ${planStart} 开始，到 ${defaultExamDate} 前完成三轮学习与考前冲刺。2027 年官方考试日期公布后，可再调整终点。</p>
           </div>
           <div class="actions">
-            <button class="btn primary" onclick="setTab('practice')">开始做题</button>
+            <button class="btn primary" onclick="startDailyFlow()">${todayComplete ? "重新开始今日流程" : "开始今日40分钟学习"}</button>
             <button class="btn" onclick="setTab('exam')">真题模拟</button>
           </div>
         </div>
+        ${todayComplete ? `
+          <div class="result-panel card">
+            <div>
+              <div class="score">已打卡</div>
+              <p class="hint">今天四个科目的知识清单、专题练习、错题复现和小模拟都完成了。稳稳往前走，明天继续加油。</p>
+            </div>
+          </div>
+        ` : ""}
         <div class="grid two">
           <div class="card">
             <h3>${plan.phase.name} · ${plan.phase.label}</h3>
@@ -1264,13 +1359,15 @@
 
     function renderPractice() {
       const list = subjectQuestions();
+      const answeredInSubject = list.filter(q => state.answers[questions.indexOf(q)] !== undefined).length;
+      const allAnswered = list.length > 0 && answeredInSubject === list.length;
       return `
         <div class="section-head">
           <div>
             <h2>${state.subject}专题练习</h2>
-            <p class="hint">每题作答后立即看解析，错题会自动进入错题本，后面按高频程度复现。</p>
+            <p class="hint">每题作答后立即看解析，错题会自动进入错题本；本科目题目做完后会进入错题复现。</p>
           </div>
-          <div class="actions"><button class="btn" onclick="setTab('wrongbook')">查看错题</button></div>
+          <div class="actions"><button class="btn" onclick="${isCurrentFlow("practice") ? "advanceFlow()" : "setTab('wrongbook')"}">${isCurrentFlow("practice") ? "进入错题复现" : "查看错题"}</button></div>
         </div>
         <div class="grid">
           ${list.map(q => {
@@ -1278,6 +1375,7 @@
             const picked = state.answers[index];
             return questionHtml(q, index, picked, picked !== undefined, "answerQuestion");
           }).join("") || `<div class="card">该科目暂未放入练习题，替换正式题库后会自动显示。</div>`}
+          ${isCurrentFlow("practice") ? `<div class="card"><b>专题练习进度：${answeredInSubject}/${list.length}</b><p class="hint">${allAnswered ? "本科目专题练习已完成，系统会自动进入错题复现。" : "做完本科目全部题目后会自动跳转；也可以手动进入下一项。"}</p></div>` : ""}
         </div>
       `;
     }
@@ -1308,7 +1406,10 @@
             <h2>${state.subject}错题复现</h2>
             <p class="hint">这里只看当前科目的错题，按出现次数排序，高频题优先复习；建议当天、3天、7天各复现一次。</p>
           </div>
-          <div class="actions"><button class="btn warn" onclick="clearSubjectWrong('${state.subject}')">清空本科错题</button></div>
+          <div class="actions">
+            <button class="btn primary" onclick="${isCurrentFlow("wrong") ? "advanceFlow()" : `startSubjectExam('${state.subject}')`}">${isCurrentFlow("wrong") ? "完成错题，进入小模拟" : "进入小模拟"}</button>
+            <button class="btn warn" onclick="clearSubjectWrong('${state.subject}')">清空本科错题</button>
+          </div>
         </div>
         <div class="grid">
           ${list.map(item => `
@@ -1342,11 +1443,17 @@
       const examTitle = exam.subject ? `${exam.subject}小模拟` : "真题模拟测试";
 
       clearTimeout(reviewTimer);
-      if (exam.submitted && exam.reviewing && exam.autoReview && exam.reviewIndex < total - 1) {
+      if (exam.submitted && exam.reviewing && exam.autoReview) {
         reviewTimer = setTimeout(() => {
-          state.exam.reviewIndex += 1;
-          if (state.exam.reviewIndex >= total - 1) state.exam.autoReview = false;
-          save();
+          if (state.exam.reviewIndex < total - 1) {
+            state.exam.reviewIndex += 1;
+            save();
+          } else if (isCurrentFlow("mock")) {
+            advanceFlow();
+          } else {
+            state.exam.autoReview = false;
+            save();
+          }
         }, 7000);
       }
 
@@ -1367,7 +1474,7 @@
             <h3>需要现在按顺序看解析吗？</h3>
             <div class="actions">
               <button class="btn primary" onclick="startReview()">需要，看解析</button>
-              <button class="btn" onclick="skipReview()">暂时不看</button>
+              <button class="btn" onclick="skipReview()">${isCurrentFlow("mock") ? "不看解析，进入下一科" : "暂时不看"}</button>
             </div>
           </div>
         `;
@@ -1392,7 +1499,7 @@
             ${exam.reviewing ? `
               <div class="actions" style="margin-top:12px;justify-content:space-between">
                 <button class="btn" onclick="moveReview(-1)" ${exam.reviewIndex === 0 ? "disabled" : ""}>上一题解析</button>
-                <button class="btn primary" onclick="moveReview(1)" ${exam.reviewIndex === total - 1 ? "disabled" : ""}>下一题解析</button>
+                <button class="btn primary" onclick="${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "advanceFlow()" : "moveReview(1)"}" ${exam.reviewIndex === total - 1 && !isCurrentFlow("mock") ? "disabled" : ""}>${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "完成解析，进入下一科" : "下一题解析"}</button>
               </div>
             ` : ""}
           </div>
