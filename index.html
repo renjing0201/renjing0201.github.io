@@ -222,6 +222,16 @@
       justify-content: flex-end;
     }
 
+    .bottom-action {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .bottom-action .btn {
+      width: 100%;
+    }
+
     .btn {
       border: 1px solid var(--line);
       background: var(--white);
@@ -955,7 +965,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v10";
+    const storeKey = "vetExamPagesState.v11";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "plan";
     state.subject ||= subjects[0].name;
@@ -1407,9 +1417,6 @@
             <h2>${subject.name}知识点清单</h2>
             <p class="hint">先把每个知识点按“能讲出来、能做题、能举例”三步过一遍，再进入专题练习。</p>
           </div>
-          <div class="actions">
-            <button class="btn primary" onclick="${isCurrentFlow("checklist") ? "advanceFlow()" : "setTab('practice')"}">${isCurrentFlow("checklist") ? (subjectChecklistDone(subject.name) ? "清单已完成，进入专题练习" : "完成清单，进入专题练习") : "开始专题练习"}</button>
-          </div>
         </div>
         <div class="card">
           ${subject.topics.map(([title, desc]) => {
@@ -1427,6 +1434,9 @@
               </label>
             `;
           }).join("")}
+          <div class="bottom-action">
+            <button class="btn primary" onclick="${isCurrentFlow("checklist") ? "advanceFlow()" : "setTab('practice')"}">${isCurrentFlow("checklist") ? (subjectChecklistDone(subject.name) ? "清单已完成，进入专题练习" : "完成清单，进入专题练习") : "开始专题练习"}</button>
+          </div>
         </div>
       `;
     }
@@ -1599,7 +1609,6 @@
             <h2>${state.subject}专题练习</h2>
             <p class="hint">每题作答后立即看解析，错题会自动进入错题本；本科目题目做完后会进入错题复现。</p>
           </div>
-          <div class="actions"><button class="btn" onclick="${isCurrentFlow("practice") ? "advanceFlow()" : "setTab('wrongbook')"}">${isCurrentFlow("practice") ? "进入错题复现" : "查看错题"}</button></div>
         </div>
         <div class="grid">
           ${list.map(q => {
@@ -1608,6 +1617,9 @@
             return questionHtml(q, index, picked, picked !== undefined, "answerQuestion");
           }).join("") || `<div class="card">该科目暂未放入练习题，替换正式题库后会自动显示。</div>`}
           ${isCurrentFlow("practice") ? `<div class="card"><b>专题练习进度：${answeredInSubject}/${list.length}</b><p class="hint">${allAnswered ? "本科目专题练习已完成，系统会自动进入错题复现。" : "做完本科目全部题目后会自动跳转；也可以手动进入下一项。"}</p></div>` : ""}
+          <div class="bottom-action">
+            <button class="btn primary" onclick="${isCurrentFlow("practice") ? "advanceFlow()" : "setTab('wrongbook')"}">${isCurrentFlow("practice") ? "进入错题复现" : "查看错题"}</button>
+          </div>
         </div>
       `;
     }
@@ -1638,10 +1650,6 @@
             <h2>${state.subject}错题复现</h2>
             <p class="hint">这里只看当前科目的错题，按出现次数排序，高频题优先复习；建议当天、3天、7天各复现一次。</p>
           </div>
-          <div class="actions">
-            <button class="btn primary" onclick="${isCurrentFlow("wrong") ? "advanceFlow()" : `startSubjectExam('${state.subject}')`}">${isCurrentFlow("wrong") ? "完成错题，进入小模拟" : "进入小模拟"}</button>
-            <button class="btn warn" onclick="clearSubjectWrong('${state.subject}')">清空本科错题</button>
-          </div>
         </div>
         <div class="grid">
           ${list.map(item => `
@@ -1656,6 +1664,10 @@
               <div class="answer-box">答案：${"ABCD"[item.q.answer]}。${item.q.explain}</div>
             </div>
           `).join("") || `<div class="card">${state.subject}目前还没有错题。先做专题练习或科目小模拟，错题会自动汇总到这里。</div>`}
+          <div class="bottom-action">
+            <button class="btn primary" onclick="${isCurrentFlow("wrong") ? "advanceFlow()" : `startSubjectExam('${state.subject}')`}">${isCurrentFlow("wrong") ? "完成错题，进入小模拟" : "进入小模拟"}</button>
+            <button class="btn warn" onclick="clearSubjectWrong('${state.subject}')">清空本科错题</button>
+          </div>
         </div>
       `;
     }
@@ -1718,12 +1730,6 @@
             <h2>${examTitle}</h2>
             <p class="hint">${exam.reviewing ? "解析会按题号自动往后播放，也可以手动上一题或下一题。" : "选完答案自动进入下一题；最后一题答完会自动交卷计分。"}</p>
           </div>
-          <div class="actions">
-            <button class="btn" onclick="resetExam(${exam.subject ? `'${exam.subject}'` : ""})">重新开始</button>
-            ${exam.reviewing ? `
-              <button class="btn" onclick="state.exam.autoReview=!state.exam.autoReview;save()">${exam.autoReview ? "暂停自动播放" : "继续自动播放"}</button>
-            ` : `<button class="btn primary" onclick="submitExam()">提前交卷</button>`}
-          </div>
         </div>
         <div class="exam-grid">
           <div>
@@ -1732,6 +1738,16 @@
               <div class="actions" style="margin-top:12px;justify-content:space-between">
                 <button class="btn" onclick="moveReview(-1)" ${exam.reviewIndex === 0 ? "disabled" : ""}>上一题解析</button>
                 <button class="btn primary" onclick="${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "advanceFlow()" : "moveReview(1)"}" ${exam.reviewIndex === total - 1 && !isCurrentFlow("mock") ? "disabled" : ""}>${exam.reviewIndex === total - 1 && isCurrentFlow("mock") ? "完成解析，进入下一科" : "下一题解析"}</button>
+              </div>
+            ` : `
+              <div class="bottom-action">
+                <button class="btn primary" onclick="submitExam()">提前交卷</button>
+                <button class="btn" onclick="resetExam(${exam.subject ? `'${exam.subject}'` : ""})">重新开始</button>
+              </div>
+            `}
+            ${exam.reviewing ? `
+              <div class="bottom-action">
+                <button class="btn" onclick="state.exam.autoReview=!state.exam.autoReview;save()">${exam.autoReview ? "暂停自动播放" : "继续自动播放"}</button>
               </div>
             ` : ""}
           </div>
