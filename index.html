@@ -850,6 +850,11 @@
       return topics[Math.abs(Math.floor(dayIndex * multiplier)) % topics.length];
     }
 
+    function topicForSubject(subjectName, seed = 0) {
+      const topics = allTopics().filter(topic => topic.subject === subjectName);
+      return topics[Math.abs(seed) % Math.max(1, topics.length)] || topicForDay(seed);
+    }
+
     function phaseForDay(dayIndex) {
       if (dayIndex < 120) return { name: "第一轮", label: "建立知识框架", dailyNew: 1, mock: "周末做 20 题小模拟" };
       if (dayIndex < 220) return { name: "第二轮", label: "专题强化与错题回炉", dailyNew: 0, mock: "每周 1 套真题模拟" };
@@ -862,8 +867,10 @@
       const dayIndex = Math.max(0, daysBetween(planStart, today));
       const totalDays = Math.max(1, daysBetween(planStart, defaultExamDate));
       const phase = phaseForDay(dayIndex);
-      const mainTopic = topicForDay(dayIndex);
-      const secondTopic = topicForDay(dayIndex + 5, 1);
+      const diagnosis = performanceDiagnosis();
+      const adaptiveSubject = phase.name === "第一轮" ? null : diagnosis.weakest.subject;
+      const mainTopic = adaptiveSubject ? topicForSubject(adaptiveSubject, dayIndex) : topicForDay(dayIndex);
+      const secondTopic = adaptiveSubject ? topicForSubject(adaptiveSubject, dayIndex + 2) : topicForDay(dayIndex + 5, 1);
       const reviews = reviewOffsets.map(offset => {
         const sourceDay = dayIndex - offset;
         if (sourceDay < 0) return null;
@@ -871,7 +878,7 @@
       }).filter(Boolean);
       const weekday = new Date().getDay();
       const mockToday = phase.name === "第一轮" ? (weekday === 0 || weekday === 6) : phase.name === "第二轮" ? weekday === 0 : dayIndex % 3 === 0;
-      return { today, dayIndex, totalDays, phase, mainTopic, secondTopic, reviews, mockToday };
+      return { today, dayIndex, totalDays, phase, mainTopic, secondTopic, reviews, mockToday, diagnosis };
     }
 
     function dailyDone(id) {
@@ -912,6 +919,57 @@
         .map(([id, item]) => ({ id: Number(id), ...item, q: questions[Number(id)] }))
         .filter(item => item.q)
         .sort((a, b) => b.count - a.count);
+    }
+
+    function performanceDiagnosis() {
+      const rows = subjects.map(subject => {
+        const subjectQs = questions.filter(q => q.subject === subject.name);
+        const answeredIndexes = subjectQs
+          .map(q => questions.indexOf(q))
+          .filter(index => state.answers[index] !== undefined || state.exam.answers[index] !== undefined);
+        const correct = answeredIndexes.filter(index => {
+          const picked = state.exam.answers[index] ?? state.answers[index];
+          return picked === questions[index].answer;
+        }).length;
+        const wrongCount = subjectQs.reduce((sum, q) => {
+          const index = questions.indexOf(q);
+          return sum + (state.wrong[index]?.count || 0);
+        }, 0);
+        const topicTotal = subject.topics.length;
+        const topicDone = subject.topics.filter(topic => state.checked[subject.name + ":" + topic[0]]).length;
+        const answered = answeredIndexes.length;
+        const accuracy = answered ? Math.round(correct / answered * 100) : 0;
+        const checklist = Math.round(topicDone / topicTotal * 100);
+        const readiness = Math.round(accuracy * 0.65 + checklist * 0.25 + Math.max(0, 100 - wrongCount * 8) * 0.1);
+        return { subject: subject.name, answered, correct, wrongCount, accuracy, checklist, readiness };
+      });
+      const answeredTotal = rows.reduce((sum, row) => sum + row.answered, 0);
+      const correctTotal = rows.reduce((sum, row) => sum + row.correct, 0);
+      const checklistTotal = Math.round(doneCount() / totalTopics() * 100);
+      const accuracyTotal = answeredTotal ? Math.round(correctTotal / answeredTotal * 100) : 0;
+      const readiness = answeredTotal < 12
+        ? Math.round(checklistTotal * 0.6 + accuracyTotal * 0.4)
+        : Math.round(accuracyTotal * 0.7 + checklistTotal * 0.3);
+      const sortedByNeed = [...rows].sort((a, b) => (a.readiness - b.readiness) || (b.wrongCount - a.wrongCount));
+      const sortedByGood = [...rows].sort((a, b) => (b.readiness - a.readiness) || (b.answered - a.answered));
+      const level = answeredTotal < 12
+        ? "样本不足，先完成第一轮结业测评"
+        : readiness >= 78
+          ? "通过预判较稳"
+          : readiness >= 65
+            ? "有通过希望，但需要压薄弱科目"
+            : "风险偏高，第二轮要重点补基础和错题";
+      return {
+        rows,
+        answeredTotal,
+        correctTotal,
+        accuracyTotal,
+        checklistTotal,
+        readiness,
+        level,
+        weakest: sortedByNeed[0],
+        strongest: sortedByGood[0]
+      };
     }
 
     function setTab(tab) {
@@ -1039,6 +1097,7 @@
 
     function renderPlan() {
       const plan = todaysPlan();
+      const diagnosis = plan.diagnosis;
       const percent = Math.min(100, Math.round(plan.dayIndex / plan.totalDays * 100));
       const tasks = [
         {
@@ -1051,7 +1110,9 @@
         {
           id: "practice",
           title: `专题练习：${plan.secondTopic.subject}`,
-          desc: `今天主练 ${plan.secondTopic.title}，先做题，再把不会的概念补回清单。`,
+          desc: plan.phase.name === "第一轮"
+            ? `今天主练 ${plan.secondTopic.title}，先做题，再把不会的概念补回清单。`
+            : `系统根据你的能力画像，优先安排薄弱方向：${diagnosis.weakest.subject}。`,
           action: "去专题练习",
           click: `state.subject='${plan.secondTopic.subject}';setTab('practice')`
         },
@@ -1070,6 +1131,16 @@
           title: "真题模拟",
           desc: plan.phase.mock,
           action: "开始模拟",
+          click: "setTab('exam')"
+        });
+      }
+
+      if (plan.phase.name === "第一轮" && (plan.dayIndex >= 110 || doneCount() / totalTopics() >= 0.8)) {
+        tasks.push({
+          id: "round1-check",
+          title: "第一轮结业测评",
+          desc: "用一套模拟测试判断当前水平，生成通过预判、薄弱科目和优势科目，再进入第二轮针对性训练。",
+          action: "开始测评",
           click: "setTab('exam')"
         });
       }
@@ -1106,6 +1177,33 @@
           <div class="card">
             <h3>三轮节奏</h3>
             <p class="hint">第一轮：搭框架，所有知识点过一遍。第二轮：按专题强化，错题回炉。第三轮：整卷训练，把速度、准确率和高频错题压实。最后 30 天只做模拟、错题和薄弱点。</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="section-head">
+            <div>
+              <h3>能力画像与通过预判</h3>
+              <p class="hint">${diagnosis.level}。当前综合准备度 ${diagnosis.readiness}%，练习正确率 ${diagnosis.accuracyTotal}%，知识清单完成 ${diagnosis.checklistTotal}%。</p>
+            </div>
+            <span class="badge ${diagnosis.readiness >= 78 ? "good" : diagnosis.readiness < 60 ? "hot" : ""}">${diagnosis.answeredTotal < 12 ? "待测评" : "已诊断"}</span>
+          </div>
+          <div class="grid two">
+            <div>
+              <h3>薄弱点</h3>
+              <p class="hint">${diagnosis.weakest.subject}：准备度 ${diagnosis.weakest.readiness}%；第二轮会优先推这个科目的专题和错题。</p>
+            </div>
+            <div>
+              <h3>擅长点</h3>
+              <p class="hint">${diagnosis.strongest.subject}：准备度 ${diagnosis.strongest.readiness}%；第三轮保持手感，避免优势科目掉分。</p>
+            </div>
+          </div>
+          <div class="grid" style="margin-top:10px">
+            ${diagnosis.rows.map(row => `
+              <div>
+                <div class="meta">${row.subject} · 正确率 ${row.accuracy}% · 知识清单 ${row.checklist}% · 错题 ${row.wrongCount} 次</div>
+                <div class="progress-line" style="--p:${row.readiness}%"><i></i></div>
+              </div>
+            `).join("")}
           </div>
         </div>
         <div class="grid" style="margin-top:12px">
