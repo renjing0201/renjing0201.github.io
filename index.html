@@ -386,6 +386,18 @@
       text-align: center;
     }
 
+    .result-panel {
+      display: grid;
+      place-items: center;
+      gap: 14px;
+      min-height: 360px;
+      text-align: center;
+    }
+
+    .result-panel .score {
+      font-size: 56px;
+    }
+
     footer {
       border-top: 1px solid var(--line);
       color: var(--muted);
@@ -632,14 +644,15 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v3";
+    const storeKey = "vetExamPagesState.v4";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "checklist";
     state.subject ||= subjects[0].name;
     state.checked ||= {};
     state.answers ||= {};
     state.wrong ||= {};
-    state.exam ||= { index: 0, answers: {}, submitted: false, startedAt: Date.now(), duration: 45 * 60 };
+    state.exam ||= { index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
+    let reviewTimer = null;
 
     function save() {
       localStorage.setItem(storeKey, JSON.stringify(state));
@@ -689,26 +702,56 @@
     }
 
     function answerExam(index, choice) {
+      if (state.exam.submitted) return;
       state.exam.answers[index] = choice;
-      if (!state.exam.submitted && index < questions.length - 1) {
+      if (index < questions.length - 1) {
         state.exam.index = index + 1;
+      } else {
+        gradeExam();
       }
       save();
     }
 
-    function submitExam() {
+    function gradeExam() {
       state.exam.submitted = true;
+      state.exam.reviewing = false;
+      state.exam.autoReview = true;
       questions.forEach((q, index) => {
         if (state.exam.answers[index] !== q.answer) {
           const old = state.wrong[index] || { count: 0, last: 0 };
           state.wrong[index] = { count: old.count + 1, last: Date.now() };
         }
       });
+    }
+
+    function submitExam() {
+      gradeExam();
       save();
     }
 
     function resetExam() {
-      state.exam = { index: 0, answers: {}, submitted: false, startedAt: Date.now(), duration: 45 * 60 };
+      clearTimeout(reviewTimer);
+      state.exam = { index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
+      save();
+    }
+
+    function startReview() {
+      state.exam.reviewing = true;
+      state.exam.reviewIndex = 0;
+      state.exam.autoReview = true;
+      save();
+    }
+
+    function skipReview() {
+      state.exam.reviewing = false;
+      state.exam.autoReview = false;
+      save();
+    }
+
+    function moveReview(step) {
+      const next = Math.max(0, Math.min(questions.length - 1, state.exam.reviewIndex + step));
+      state.exam.reviewIndex = next;
+      if (next >= questions.length - 1) state.exam.autoReview = false;
       save();
     }
 
@@ -791,7 +834,8 @@
             ${q.options.map((op, i) => {
               const cls = picked === i ? "selected" : "";
               const reveal = showAnswer ? (i === q.answer ? " correct" : picked === i && picked !== q.answer ? " wrong" : "") : "";
-              return `<button class="option ${cls}${reveal}" onclick="${handler}(${index},${i})"><b>${"ABCD"[i]}</b><span>${op}</span></button>`;
+              const click = showAnswer ? "" : `onclick="${handler}(${index},${i})"`;
+              return `<button class="option ${cls}${reveal}" ${click}><b>${"ABCD"[i]}</b><span>${op}</span></button>`;
             }).join("")}
           </div>
           ${showAnswer ? `<div class="answer-box">参考答案：${"ABCD"[q.answer]}。${q.explain}</div>` : ""}
@@ -828,36 +872,80 @@
 
     function renderExam() {
       const exam = state.exam;
-      const q = questions[exam.index];
+      const q = questions[exam.reviewing ? exam.reviewIndex : exam.index];
       const answered = Object.keys(exam.answers).length;
       const score = questions.filter((item, index) => exam.answers[index] === item.answer).length;
       const percent = Math.round(score / questions.length * 100);
       const unanswered = questions.length - answered;
+      const wrong = questions.length - score - unanswered;
+
+      clearTimeout(reviewTimer);
+      if (exam.submitted && exam.reviewing && exam.autoReview && exam.reviewIndex < questions.length - 1) {
+        reviewTimer = setTimeout(() => {
+          state.exam.reviewIndex += 1;
+          if (state.exam.reviewIndex >= questions.length - 1) state.exam.autoReview = false;
+          save();
+        }, 7000);
+      }
+
+      if (exam.submitted && !exam.reviewing) {
+        return `
+          <div class="section-head">
+            <div>
+              <h2>真题模拟测试</h2>
+              <p class="hint">本次模拟已自动交卷，下面是本次成绩。</p>
+            </div>
+            <div class="actions"><button class="btn" onclick="resetExam()">重新开始</button></div>
+          </div>
+          <div class="result-panel card">
+            <div>
+              <div class="score">${percent}分</div>
+              <p class="hint">总分 100 分，共 ${questions.length} 题；答对 ${score} 题，错题 ${wrong} 题，未答 ${unanswered} 题。</p>
+            </div>
+            <h3>需要现在按顺序看解析吗？</h3>
+            <div class="actions">
+              <button class="btn primary" onclick="startReview()">需要，看解析</button>
+              <button class="btn" onclick="skipReview()">暂时不看</button>
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="section-head">
           <div>
             <h2>真题模拟测试</h2>
-            <p class="hint">模拟限时作答、交卷计分、查看解析。当前为练习数据，正式使用时替换为近五年真题。</p>
+            <p class="hint">${exam.reviewing ? "解析会按题号自动往后播放，也可以手动上一题或下一题。" : "选完答案自动进入下一题；最后一题答完会自动交卷计分。"}</p>
           </div>
           <div class="actions">
             <button class="btn" onclick="resetExam()">重新开始</button>
-            <button class="btn primary" onclick="submitExam()">交卷计分</button>
+            ${exam.reviewing ? `
+              <button class="btn" onclick="state.exam.autoReview=!state.exam.autoReview;save()">${exam.autoReview ? "暂停自动播放" : "继续自动播放"}</button>
+            ` : `<button class="btn primary" onclick="submitExam()">提前交卷</button>`}
           </div>
         </div>
         <div class="exam-grid">
-          <div>${questionHtml(q, exam.index, exam.answers[exam.index], exam.submitted, "answerExam")}</div>
+          <div>
+            ${questionHtml(q, exam.reviewing ? exam.reviewIndex : exam.index, exam.answers[exam.reviewing ? exam.reviewIndex : exam.index], exam.submitted, "answerExam")}
+            ${exam.reviewing ? `
+              <div class="actions" style="margin-top:12px;justify-content:space-between">
+                <button class="btn" onclick="moveReview(-1)" ${exam.reviewIndex === 0 ? "disabled" : ""}>上一题解析</button>
+                <button class="btn primary" onclick="moveReview(1)" ${exam.reviewIndex === questions.length - 1 ? "disabled" : ""}>下一题解析</button>
+              </div>
+            ` : ""}
+          </div>
           <div class="grid">
             <div class="card">
-              <h3>答题进度</h3>
-              <div class="score">${exam.submitted ? percent + "分" : answered + "/" + questions.length}</div>
+              <h3>${exam.reviewing ? "解析进度" : "答题进度"}</h3>
+              <div class="score">${exam.reviewing ? (exam.reviewIndex + 1) + "/" + questions.length : answered + "/" + questions.length}</div>
               ${exam.submitted ? `
                 <div class="score-note">
                   <span>答对 ${score}</span>
-                  <span>错题 ${questions.length - score - unanswered}</span>
+                  <span>错题 ${wrong}</span>
                   <span>未答 ${unanswered}</span>
                 </div>
               ` : ""}
-              <p class="hint">${exam.submitted ? "已交卷，右侧答题卡可逐题回看解析，错题已自动进入错题本。" : "完成后点击交卷计分。"}</p>
+              <p class="hint">${exam.reviewing ? "当前解析会自动向后播放，最后一题会停住。" : "选完一题会自动跳到下一题。"}</p>
             </div>
             <div class="card">
               <h3>答题卡</h3>
