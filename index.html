@@ -566,6 +566,10 @@
       body.exam-mode .result-panel .score {
         font-size: 46px;
       }
+
+      body:not(.exam-mode) nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
@@ -789,21 +793,98 @@
     ];
 
     const tabs = [
+      ["plan", "今日计划"],
       ["checklist", "知识点清单"],
       ["practice", "专题练习"],
       ["wrongbook", "错题复现"],
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v4";
+    const storeKey = "vetExamPagesState.v5";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
-    state.tab ||= "checklist";
+    state.tab ||= "plan";
     state.subject ||= subjects[0].name;
     state.checked ||= {};
     state.answers ||= {};
     state.wrong ||= {};
+    state.daily ||= {};
     state.exam ||= { index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
     let reviewTimer = null;
+
+    const planStart = "2026-08-13";
+    const defaultExamDate = "2027-07-11";
+    const reviewOffsets = [1, 3, 7, 15, 30];
+
+    function parseDate(value) {
+      const [year, month, day] = value.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    }
+
+    function dateKey(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function addDays(date, days) {
+      const next = new Date(date);
+      next.setDate(next.getDate() + days);
+      return next;
+    }
+
+    function daysBetween(start, end) {
+      return Math.floor((parseDate(end) - parseDate(start)) / 86400000);
+    }
+
+    function allTopics() {
+      return subjects.flatMap(subject => subject.topics.map(topic => ({
+        subject: subject.name,
+        title: topic[0],
+        desc: topic[1]
+      })));
+    }
+
+    function topicForDay(dayIndex, multiplier = 1) {
+      const topics = allTopics();
+      return topics[Math.abs(Math.floor(dayIndex * multiplier)) % topics.length];
+    }
+
+    function phaseForDay(dayIndex) {
+      if (dayIndex < 120) return { name: "第一轮", label: "建立知识框架", dailyNew: 1, mock: "周末做 20 题小模拟" };
+      if (dayIndex < 220) return { name: "第二轮", label: "专题强化与错题回炉", dailyNew: 0, mock: "每周 1 套真题模拟" };
+      if (dayIndex < 300) return { name: "第三轮", label: "全科综合冲刺", dailyNew: 0, mock: "每 2-3 天 1 套真题模拟" };
+      return { name: "考前冲刺", label: "整卷速度与高频错题", dailyNew: 0, mock: "每天真题模拟或错题整卷复盘" };
+    }
+
+    function todaysPlan() {
+      const today = dateKey();
+      const dayIndex = Math.max(0, daysBetween(planStart, today));
+      const totalDays = Math.max(1, daysBetween(planStart, defaultExamDate));
+      const phase = phaseForDay(dayIndex);
+      const mainTopic = topicForDay(dayIndex);
+      const secondTopic = topicForDay(dayIndex + 5, 1);
+      const reviews = reviewOffsets.map(offset => {
+        const sourceDay = dayIndex - offset;
+        if (sourceDay < 0) return null;
+        return { offset, ...topicForDay(sourceDay) };
+      }).filter(Boolean);
+      const weekday = new Date().getDay();
+      const mockToday = phase.name === "第一轮" ? (weekday === 0 || weekday === 6) : phase.name === "第二轮" ? weekday === 0 : dayIndex % 3 === 0;
+      return { today, dayIndex, totalDays, phase, mainTopic, secondTopic, reviews, mockToday };
+    }
+
+    function dailyDone(id) {
+      const key = todaysPlan().today;
+      return Boolean(state.daily[key]?.[id]);
+    }
+
+    function toggleDaily(id) {
+      const key = todaysPlan().today;
+      state.daily[key] ||= {};
+      state.daily[key][id] = !state.daily[key][id];
+      save();
+    }
 
     function save() {
       localStorage.setItem(storeKey, JSON.stringify(state));
@@ -952,6 +1033,95 @@
               </label>
             `;
           }).join("")}
+        </div>
+      `;
+    }
+
+    function renderPlan() {
+      const plan = todaysPlan();
+      const percent = Math.min(100, Math.round(plan.dayIndex / plan.totalDays * 100));
+      const tasks = [
+        {
+          id: "learn",
+          title: `${plan.phase.name}：${plan.mainTopic.subject} · ${plan.mainTopic.title}`,
+          desc: plan.phase.name === "第一轮" ? plan.mainTopic.desc : `回到 ${plan.mainTopic.title}，用“讲给别人听”的方式复述一遍，再做对应题。`,
+          action: "去知识清单",
+          click: `state.subject='${plan.mainTopic.subject}';setTab('checklist')`
+        },
+        {
+          id: "practice",
+          title: `专题练习：${plan.secondTopic.subject}`,
+          desc: `今天主练 ${plan.secondTopic.title}，先做题，再把不会的概念补回清单。`,
+          action: "去专题练习",
+          click: `state.subject='${plan.secondTopic.subject}';setTab('practice')`
+        },
+        {
+          id: "wrong",
+          title: "错题复现",
+          desc: wrongList().length ? `当前错题本有 ${wrongList().length} 题，优先复现高频错题。` : "当前错题本为空，今天做题产生的错题会自动进入这里。",
+          action: "去错题本",
+          click: "setTab('wrongbook')"
+        }
+      ];
+
+      if (plan.mockToday) {
+        tasks.push({
+          id: "mock",
+          title: "真题模拟",
+          desc: plan.phase.mock,
+          action: "开始模拟",
+          click: "setTab('exam')"
+        });
+      }
+
+      const reviewTasks = plan.reviews.map(item => `
+        <label class="check-row">
+          <input type="checkbox" ${dailyDone(`review-${item.offset}-${item.title}`) ? "checked" : ""} onchange="toggleDaily('review-${item.offset}-${item.title}')">
+          <span><b>${item.offset} 天前内容复习：${item.subject} · ${item.title}</b><br><small>${item.desc}</small></span>
+          <span class="badge">记忆曲线</span>
+        </label>
+      `).join("");
+
+      const doneCountToday = tasks.filter(task => dailyDone(task.id)).length + plan.reviews.filter(item => dailyDone(`review-${item.offset}-${item.title}`)).length;
+      const totalToday = tasks.length + plan.reviews.length;
+
+      return `
+        <div class="section-head">
+          <div>
+            <h2>今日学习计划</h2>
+            <p class="hint">从 ${planStart} 开始，到 ${defaultExamDate} 前完成三轮学习与考前冲刺。2027 年官方考试日期公布后，可再调整终点。</p>
+          </div>
+          <div class="actions">
+            <button class="btn primary" onclick="setTab('practice')">开始做题</button>
+            <button class="btn" onclick="setTab('exam')">真题模拟</button>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <h3>${plan.phase.name} · ${plan.phase.label}</h3>
+            <p class="hint">第 ${plan.dayIndex + 1} 天 / 约 ${plan.totalDays} 天，进度 ${percent}%</p>
+            <div class="progress-line" style="--p:${percent}%"><i></i></div>
+            <p class="hint">今日完成 ${doneCountToday}/${totalToday} 项。每天只要按这个顺序走：知识点、专题题、错题、记忆曲线、模拟卷。</p>
+          </div>
+          <div class="card">
+            <h3>三轮节奏</h3>
+            <p class="hint">第一轮：搭框架，所有知识点过一遍。第二轮：按专题强化，错题回炉。第三轮：整卷训练，把速度、准确率和高频错题压实。最后 30 天只做模拟、错题和薄弱点。</p>
+          </div>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          ${tasks.map(task => `
+            <div class="card">
+              <label class="check-row">
+                <input type="checkbox" ${dailyDone(task.id) ? "checked" : ""} onchange="toggleDaily('${task.id}')">
+                <span><b>${task.title}</b><br><small>${task.desc}</small></span>
+                <button class="btn" onclick="${task.click}">${task.action}</button>
+              </label>
+            </div>
+          `).join("")}
+          <div class="card">
+            <h3>记忆曲线复习</h3>
+            ${reviewTasks || `<p class="hint">今天是计划初期，还没有到 1/3/7/15/30 天复习节点。明天开始会自动出现回顾任务。</p>`}
+          </div>
         </div>
       `;
     }
@@ -1114,6 +1284,7 @@
       renderChrome();
       const view = document.getElementById("view");
       view.innerHTML = {
+        plan: renderPlan,
         checklist: renderChecklist,
         practice: renderPractice,
         wrongbook: renderWrongBook,
