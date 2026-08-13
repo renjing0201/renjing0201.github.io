@@ -800,7 +800,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v5";
+    const storeKey = "vetExamPagesState.v6";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "plan";
     state.subject ||= subjects[0].name;
@@ -808,7 +808,7 @@
     state.answers ||= {};
     state.wrong ||= {};
     state.daily ||= {};
-    state.exam ||= { index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
+    state.exam ||= { subject: null, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
     let reviewTimer = null;
 
     const planStart = "2026-08-13";
@@ -906,6 +906,13 @@
       return questions.filter(q => q.subject === name);
     }
 
+    function examQuestionIndexes() {
+      return questions
+        .map((q, index) => ({ q, index }))
+        .filter(item => !state.exam.subject || item.q.subject === state.exam.subject)
+        .map(item => item.index);
+    }
+
     function doneCount() {
       return Object.values(state.checked).filter(Boolean).length;
     }
@@ -919,6 +926,14 @@
         .map(([id, item]) => ({ id: Number(id), ...item, q: questions[Number(id)] }))
         .filter(item => item.q)
         .sort((a, b) => b.count - a.count);
+    }
+
+    function clearSubjectWrong(subjectName) {
+      Object.keys(state.wrong).forEach(id => {
+        const q = questions[Number(id)];
+        if (q?.subject === subjectName) delete state.wrong[id];
+      });
+      save();
     }
 
     function performanceDiagnosis() {
@@ -993,9 +1008,11 @@
 
     function answerExam(index, choice) {
       if (state.exam.submitted) return;
+      const examIndexes = examQuestionIndexes();
+      const position = Math.max(0, examIndexes.indexOf(index));
       state.exam.answers[index] = choice;
-      if (index < questions.length - 1) {
-        state.exam.index = index + 1;
+      if (position < examIndexes.length - 1) {
+        state.exam.index = position + 1;
       } else {
         gradeExam();
       }
@@ -1003,10 +1020,12 @@
     }
 
     function gradeExam() {
+      const examIndexes = examQuestionIndexes();
       state.exam.submitted = true;
       state.exam.reviewing = false;
       state.exam.autoReview = true;
-      questions.forEach((q, index) => {
+      examIndexes.forEach(index => {
+        const q = questions[index];
         if (state.exam.answers[index] !== q.answer) {
           const old = state.wrong[index] || { count: 0, last: 0 };
           state.wrong[index] = { count: old.count + 1, last: Date.now() };
@@ -1019,9 +1038,17 @@
       save();
     }
 
-    function resetExam() {
+    function resetExam(subject = null) {
       clearTimeout(reviewTimer);
-      state.exam = { index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
+      state.exam = { subject, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
+      save();
+    }
+
+    function startSubjectExam(subject) {
+      state.subject = subject;
+      state.tab = "exam";
+      clearTimeout(reviewTimer);
+      state.exam = { subject, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
       save();
     }
 
@@ -1039,9 +1066,10 @@
     }
 
     function moveReview(step) {
-      const next = Math.max(0, Math.min(questions.length - 1, state.exam.reviewIndex + step));
+      const examIndexes = examQuestionIndexes();
+      const next = Math.max(0, Math.min(examIndexes.length - 1, state.exam.reviewIndex + step));
       state.exam.reviewIndex = next;
-      if (next >= questions.length - 1) state.exam.autoReview = false;
+      if (next >= examIndexes.length - 1) state.exam.autoReview = false;
       save();
     }
 
@@ -1099,51 +1127,48 @@
       const plan = todaysPlan();
       const diagnosis = plan.diagnosis;
       const percent = Math.min(100, Math.round(plan.dayIndex / plan.totalDays * 100));
-      const tasks = [
+      const subjectSteps = subjects.flatMap((subject, subjectIndex) => [
         {
-          id: "learn",
-          title: `${plan.phase.name}：${plan.mainTopic.subject} · ${plan.mainTopic.title}`,
-          desc: plan.phase.name === "第一轮" ? plan.mainTopic.desc : `回到 ${plan.mainTopic.title}，用“讲给别人听”的方式复述一遍，再做对应题。`,
-          action: "去知识清单",
-          click: `state.subject='${plan.mainTopic.subject}';setTab('checklist')`
+          id: `${subject.name}-checklist`,
+          subject: subject.name,
+          order: subjectIndex + 1,
+          title: "知识清单",
+          minutes: 2,
+          desc: `快速过 ${topicForSubject(subject.name, plan.dayIndex + subjectIndex).title}，先确认今天要掌握的点。`,
+          action: "去清单",
+          click: `state.subject='${subject.name}';setTab('checklist')`
         },
         {
-          id: "practice",
-          title: `专题练习：${plan.secondTopic.subject}`,
-          desc: plan.phase.name === "第一轮"
-            ? `今天主练 ${plan.secondTopic.title}，先做题，再把不会的概念补回清单。`
-            : `系统根据你的能力画像，优先安排薄弱方向：${diagnosis.weakest.subject}。`,
-          action: "去专题练习",
-          click: `state.subject='${plan.secondTopic.subject}';setTab('practice')`
+          id: `${subject.name}-practice`,
+          subject: subject.name,
+          order: subjectIndex + 1,
+          title: "专题练习",
+          minutes: 3,
+          desc: plan.phase.name === "第一轮" ? "做本学科示例题，错题自动进错题本。" : "按能力画像优先补薄弱知识点。",
+          action: "去练习",
+          click: `state.subject='${subject.name}';setTab('practice')`
         },
         {
-          id: "wrong",
+          id: `${subject.name}-wrong`,
+          subject: subject.name,
+          order: subjectIndex + 1,
           title: "错题复现",
-          desc: wrongList().length ? `当前错题本有 ${wrongList().length} 题，优先复现高频错题。` : "当前错题本为空，今天做题产生的错题会自动进入这里。",
-          action: "去错题本",
-          click: "setTab('wrongbook')"
-        }
-      ];
-
-      if (plan.mockToday) {
-        tasks.push({
-          id: "mock",
-          title: "真题模拟",
-          desc: plan.phase.mock,
+          minutes: 2,
+          desc: wrongList().filter(item => item.q.subject === subject.name).length ? "只复现本科目错题，优先看高频错题。" : "本科目暂无错题，今天做错后会自动沉淀。",
+          action: "去错题",
+          click: `state.subject='${subject.name}';setTab('wrongbook')`
+        },
+        {
+          id: `${subject.name}-mock`,
+          subject: subject.name,
+          order: subjectIndex + 1,
+          title: "科目小模拟",
+          minutes: 3,
+          desc: "做本科目小模拟，答完自动计分并可顺序看解析。",
           action: "开始模拟",
-          click: "setTab('exam')"
-        });
-      }
-
-      if (plan.phase.name === "第一轮" && (plan.dayIndex >= 110 || doneCount() / totalTopics() >= 0.8)) {
-        tasks.push({
-          id: "round1-check",
-          title: "第一轮结业测评",
-          desc: "用一套模拟测试判断当前水平，生成通过预判、薄弱科目和优势科目，再进入第二轮针对性训练。",
-          action: "开始测评",
-          click: "setTab('exam')"
-        });
-      }
+          click: `startSubjectExam('${subject.name}')`
+        }
+      ]);
 
       const reviewTasks = plan.reviews.map(item => `
         <label class="check-row">
@@ -1153,8 +1178,8 @@
         </label>
       `).join("");
 
-      const doneCountToday = tasks.filter(task => dailyDone(task.id)).length + plan.reviews.filter(item => dailyDone(`review-${item.offset}-${item.title}`)).length;
-      const totalToday = tasks.length + plan.reviews.length;
+      const doneCountToday = subjectSteps.filter(task => dailyDone(task.id)).length;
+      const totalToday = subjectSteps.length;
 
       return `
         <div class="section-head">
@@ -1172,7 +1197,7 @@
             <h3>${plan.phase.name} · ${plan.phase.label}</h3>
             <p class="hint">第 ${plan.dayIndex + 1} 天 / 约 ${plan.totalDays} 天，进度 ${percent}%</p>
             <div class="progress-line" style="--p:${percent}%"><i></i></div>
-            <p class="hint">今日完成 ${doneCountToday}/${totalToday} 项。每天只要按这个顺序走：知识点、专题题、错题、记忆曲线、模拟卷。</p>
+            <p class="hint">今日完成 ${doneCountToday}/${totalToday} 项。每天约 40 分钟：四个科目依次走完清单、专题、错题、小模拟。</p>
           </div>
           <div class="card">
             <h3>三轮节奏</h3>
@@ -1207,17 +1232,30 @@
           </div>
         </div>
         <div class="grid" style="margin-top:12px">
-          ${tasks.map(task => `
+          ${subjects.map(subject => {
+            const steps = subjectSteps.filter(step => step.subject === subject.name);
+            const subjectDone = steps.filter(step => dailyDone(step.id)).length;
+            return `
             <div class="card">
-              <label class="check-row">
-                <input type="checkbox" ${dailyDone(task.id) ? "checked" : ""} onchange="toggleDaily('${task.id}')">
-                <span><b>${task.title}</b><br><small>${task.desc}</small></span>
-                <button class="btn" onclick="${task.click}">${task.action}</button>
-              </label>
+              <div class="section-head">
+                <div>
+                  <h3>${subject.name} · 第 ${subjects.indexOf(subject) + 1} 段 / 10 分钟</h3>
+                  <p class="hint">先完成本科目四步，再进入下一个科目。完成 ${subjectDone}/4。</p>
+                </div>
+                <span class="badge ${subjectDone === 4 ? "good" : ""}">${subjectDone === 4 ? "已完成" : "进行中"}</span>
+              </div>
+              ${steps.map(step => `
+                <label class="check-row">
+                  <input type="checkbox" ${dailyDone(step.id) ? "checked" : ""} onchange="toggleDaily('${step.id}')">
+                  <span><b>${step.title} · ${step.minutes} 分钟</b><br><small>${step.desc}</small></span>
+                  <button class="btn" onclick="${step.click}">${step.action}</button>
+                </label>
+              `).join("")}
             </div>
-          `).join("")}
+          `}).join("")}
           <div class="card">
-            <h3>记忆曲线复习</h3>
+            <h3>记忆曲线复习提示</h3>
+            <p class="hint">这些内容穿插在每个科目的“错题复现”2 分钟里，不额外增加今天 40 分钟总时长。</p>
             ${reviewTasks || `<p class="hint">今天是计划初期，还没有到 1/3/7/15/30 天复习节点。明天开始会自动出现回顾任务。</p>`}
           </div>
         </div>
@@ -1244,11 +1282,11 @@
       `;
     }
 
-    function questionHtml(q, index, picked, showAnswer, handler) {
+    function questionHtml(q, index, picked, showAnswer, handler, displayNumber = index + 1) {
       return `
         <article class="question">
           <div class="meta">${q.subject} · ${q.topic}</div>
-          <div class="stem">${index + 1}. ${q.stem}</div>
+          <div class="stem">${displayNumber}. ${q.stem}</div>
           <div class="grid">
             ${q.options.map((op, i) => {
               const cls = picked === i ? "selected" : "";
@@ -1263,14 +1301,14 @@
     }
 
     function renderWrongBook() {
-      const list = wrongList();
+      const list = wrongList().filter(item => item.q.subject === state.subject);
       return `
         <div class="section-head">
           <div>
-            <h2>错题复现</h2>
-            <p class="hint">错题按出现次数排序，高频题优先复习；建议当天、3天、7天各复现一次。</p>
+            <h2>${state.subject}错题复现</h2>
+            <p class="hint">这里只看当前科目的错题，按出现次数排序，高频题优先复习；建议当天、3天、7天各复现一次。</p>
           </div>
-          <div class="actions"><button class="btn warn" onclick="state.wrong={};save()">清空错题本</button></div>
+          <div class="actions"><button class="btn warn" onclick="clearSubjectWrong('${state.subject}')">清空本科错题</button></div>
         </div>
         <div class="grid">
           ${list.map(item => `
@@ -1284,25 +1322,30 @@
               </div>
               <div class="answer-box">答案：${"ABCD"[item.q.answer]}。${item.q.explain}</div>
             </div>
-          `).join("") || `<div class="card">目前还没有错题。先做专题练习或真题模拟，错题会自动汇总到这里。</div>`}
+          `).join("") || `<div class="card">${state.subject}目前还没有错题。先做专题练习或科目小模拟，错题会自动汇总到这里。</div>`}
         </div>
       `;
     }
 
     function renderExam() {
       const exam = state.exam;
-      const q = questions[exam.reviewing ? exam.reviewIndex : exam.index];
-      const answered = Object.keys(exam.answers).length;
-      const score = questions.filter((item, index) => exam.answers[index] === item.answer).length;
-      const percent = Math.round(score / questions.length * 100);
-      const unanswered = questions.length - answered;
-      const wrong = questions.length - score - unanswered;
+      const examIndexes = examQuestionIndexes();
+      const activePosition = Math.min(exam.reviewing ? exam.reviewIndex : exam.index, examIndexes.length - 1);
+      const activeIndex = examIndexes[activePosition] ?? 0;
+      const q = questions[activeIndex];
+      const answered = examIndexes.filter(index => exam.answers[index] !== undefined).length;
+      const score = examIndexes.filter(index => exam.answers[index] === questions[index].answer).length;
+      const total = examIndexes.length;
+      const percent = Math.round(score / total * 100);
+      const unanswered = total - answered;
+      const wrong = total - score - unanswered;
+      const examTitle = exam.subject ? `${exam.subject}小模拟` : "真题模拟测试";
 
       clearTimeout(reviewTimer);
-      if (exam.submitted && exam.reviewing && exam.autoReview && exam.reviewIndex < questions.length - 1) {
+      if (exam.submitted && exam.reviewing && exam.autoReview && exam.reviewIndex < total - 1) {
         reviewTimer = setTimeout(() => {
           state.exam.reviewIndex += 1;
-          if (state.exam.reviewIndex >= questions.length - 1) state.exam.autoReview = false;
+          if (state.exam.reviewIndex >= total - 1) state.exam.autoReview = false;
           save();
         }, 7000);
       }
@@ -1311,15 +1354,15 @@
         return `
           <div class="section-head">
             <div>
-              <h2>真题模拟测试</h2>
+              <h2>${examTitle}</h2>
               <p class="hint">本次模拟已自动交卷，下面是本次成绩。</p>
             </div>
-            <div class="actions"><button class="btn" onclick="resetExam()">重新开始</button></div>
+            <div class="actions"><button class="btn" onclick="resetExam(${exam.subject ? `'${exam.subject}'` : ""})">重新开始</button></div>
           </div>
           <div class="result-panel card">
             <div>
               <div class="score">${percent}分</div>
-              <p class="hint">总分 100 分，共 ${questions.length} 题；答对 ${score} 题，错题 ${wrong} 题，未答 ${unanswered} 题。</p>
+              <p class="hint">总分 100 分，共 ${total} 题；答对 ${score} 题，错题 ${wrong} 题，未答 ${unanswered} 题。</p>
             </div>
             <h3>需要现在按顺序看解析吗？</h3>
             <div class="actions">
@@ -1333,11 +1376,11 @@
       return `
         <div class="section-head">
           <div>
-            <h2>真题模拟测试</h2>
+            <h2>${examTitle}</h2>
             <p class="hint">${exam.reviewing ? "解析会按题号自动往后播放，也可以手动上一题或下一题。" : "选完答案自动进入下一题；最后一题答完会自动交卷计分。"}</p>
           </div>
           <div class="actions">
-            <button class="btn" onclick="resetExam()">重新开始</button>
+            <button class="btn" onclick="resetExam(${exam.subject ? `'${exam.subject}'` : ""})">重新开始</button>
             ${exam.reviewing ? `
               <button class="btn" onclick="state.exam.autoReview=!state.exam.autoReview;save()">${exam.autoReview ? "暂停自动播放" : "继续自动播放"}</button>
             ` : `<button class="btn primary" onclick="submitExam()">提前交卷</button>`}
@@ -1345,18 +1388,18 @@
         </div>
         <div class="exam-grid">
           <div>
-            ${questionHtml(q, exam.reviewing ? exam.reviewIndex : exam.index, exam.answers[exam.reviewing ? exam.reviewIndex : exam.index], exam.submitted, "answerExam")}
+            ${questionHtml(q, activeIndex, exam.answers[activeIndex], exam.submitted, "answerExam", activePosition + 1)}
             ${exam.reviewing ? `
               <div class="actions" style="margin-top:12px;justify-content:space-between">
                 <button class="btn" onclick="moveReview(-1)" ${exam.reviewIndex === 0 ? "disabled" : ""}>上一题解析</button>
-                <button class="btn primary" onclick="moveReview(1)" ${exam.reviewIndex === questions.length - 1 ? "disabled" : ""}>下一题解析</button>
+                <button class="btn primary" onclick="moveReview(1)" ${exam.reviewIndex === total - 1 ? "disabled" : ""}>下一题解析</button>
               </div>
             ` : ""}
           </div>
           <div class="grid">
             <div class="card progress-card">
               <h3>${exam.reviewing ? "解析进度" : "答题进度"}</h3>
-              <div class="score">${exam.reviewing ? (exam.reviewIndex + 1) + "/" + questions.length : answered + "/" + questions.length}</div>
+              <div class="score">${exam.reviewing ? (exam.reviewIndex + 1) + "/" + total : answered + "/" + total}</div>
               ${exam.submitted ? `
                 <div class="score-note">
                   <span>答对 ${score}</span>
@@ -1369,7 +1412,7 @@
             <div class="card sheet-card">
               <h3>答题卡</h3>
               <div class="sheet">
-                ${questions.map((_, i) => `<button class="${exam.answers[i] !== undefined ? "done" : ""} ${exam.index === i ? "current" : ""}" onclick="state.exam.index=${i};save()">${i + 1}</button>`).join("")}
+                ${examIndexes.map((index, position) => `<button class="${exam.answers[index] !== undefined ? "done" : ""} ${exam.index === position ? "current" : ""}" onclick="state.exam.index=${position};save()">${position + 1}</button>`).join("")}
               </div>
             </div>
           </div>
