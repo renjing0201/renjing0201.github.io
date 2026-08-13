@@ -632,7 +632,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v2";
+    const storeKey = "vetExamPagesState.v3";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "checklist";
     state.subject ||= subjects[0].name;
@@ -688,8 +688,11 @@
       save();
     }
 
-    function answerExam(choice) {
-      state.exam.answers[state.exam.index] = choice;
+    function answerExam(index, choice) {
+      state.exam.answers[index] = choice;
+      if (!state.exam.submitted && index < questions.length - 1) {
+        state.exam.index = index + 1;
+      }
       save();
     }
 
