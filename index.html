@@ -965,7 +965,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v12";
+    const storeKey = "vetExamPagesState.v13";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "plan";
     state.subject ||= subjects[0].name;
@@ -976,6 +976,7 @@
     state.flow ||= { active: false, subjectIndex: 0, stepIndex: 0, completed: false };
     state.exam ||= { subject: null, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
     let reviewTimer = null;
+    let shouldScrollTop = false;
 
     const planStart = "2026-08-13";
     const defaultExamDate = "2027-07-11";
@@ -1075,6 +1076,10 @@
       state.daily[key][id] = true;
     }
 
+    function requestTop() {
+      shouldScrollTop = true;
+    }
+
     function currentFlowStep() {
       return flowSteps[state.flow.stepIndex] || flowSteps[0];
     }
@@ -1097,6 +1102,7 @@
     }
 
     function startDailyFlow() {
+      requestTop();
       state.flow = { active: true, subjectIndex: 0, stepIndex: 0, completed: false };
       state.subject = subjects[0].name;
       state.tab = "checklist";
@@ -1108,6 +1114,7 @@
         completeDailyFlow();
         return;
       }
+      requestTop();
       const subject = subjects[subjectIndex];
       const step = flowSteps[stepIndex];
       state.flow = { active: true, subjectIndex, stepIndex, completed: false };
@@ -1137,6 +1144,7 @@
     }
 
     function completeDailyFlow() {
+      requestTop();
       subjects.forEach(subject => flowSteps.forEach(step => markDaily(dailyStepId(subject.name, step.id))));
       markDaily("today-complete");
       state.flow = { active: false, subjectIndex: subjects.length - 1, stepIndex: flowSteps.length - 1, completed: true };
@@ -1253,11 +1261,13 @@
     }
 
     function setTab(tab) {
+      requestTop();
       state.tab = tab;
       save();
     }
 
     function setSubject(name) {
+      requestTop();
       state.subject = name;
       save();
     }
@@ -1309,12 +1319,14 @@
     }
 
     function resetExam(subject = null) {
+      requestTop();
       clearTimeout(reviewTimer);
       state.exam = { subject, index: 0, answers: {}, submitted: false, reviewing: false, reviewIndex: 0, autoReview: true, startedAt: Date.now(), duration: 45 * 60 };
       save();
     }
 
     function startSubjectExam(subject) {
+      requestTop();
       state.subject = subject;
       state.tab = "exam";
       clearTimeout(reviewTimer);
@@ -1749,6 +1761,10 @@
         wrongbook: renderWrongBook,
         exam: renderExam
       }[state.tab]();
+      if (shouldScrollTop) {
+        shouldScrollTop = false;
+        requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+      }
     }
 
     render();
