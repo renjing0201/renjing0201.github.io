@@ -415,6 +415,157 @@
       aside { position: static; }
       .subject-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       main { padding-bottom: 42px; }
+
+      body.exam-mode header .sub,
+      body.exam-mode header .stats,
+      body.exam-mode aside,
+      body.exam-mode footer,
+      body.exam-mode .sheet-card {
+        display: none;
+      }
+
+      body.exam-mode .topbar {
+        padding: 8px 10px;
+        gap: 6px;
+      }
+
+      body.exam-mode .mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        font-size: 14px;
+      }
+
+      body.exam-mode h1 {
+        font-size: 15px;
+      }
+
+      body.exam-mode nav {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      body.exam-mode .tab {
+        min-height: 32px;
+        padding: 6px 2px;
+        font-size: 12px;
+        border-radius: 6px;
+      }
+
+      body.exam-mode main {
+        padding: 6px 8px 10px;
+      }
+
+      body.exam-mode .panel {
+        min-height: auto;
+        border: 0;
+        padding: 0;
+        background: transparent;
+      }
+
+      body.exam-mode .section-head {
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+
+      body.exam-mode .section-head h2 {
+        font-size: 16px;
+      }
+
+      body.exam-mode .section-head .hint {
+        display: none;
+      }
+
+      body.exam-mode .actions {
+        gap: 6px;
+      }
+
+      body.exam-mode .btn {
+        min-height: 32px;
+        padding: 6px 8px;
+        font-size: 12px;
+        border-radius: 6px;
+      }
+
+      body.exam-mode .exam-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      body.exam-mode .exam-grid > .grid {
+        order: -1;
+        gap: 6px;
+      }
+
+      body.exam-mode .progress-card {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 10px;
+        align-items: center;
+        padding: 7px 9px;
+      }
+
+      body.exam-mode .progress-card h3,
+      body.exam-mode .progress-card .hint {
+        display: none;
+      }
+
+      body.exam-mode .progress-card .score {
+        font-size: 20px;
+      }
+
+      body.exam-mode .score-note {
+        margin: 0;
+        gap: 5px;
+      }
+
+      body.exam-mode .score-note span {
+        padding: 5px;
+        font-size: 11px;
+      }
+
+      body.exam-mode .question {
+        padding: 10px;
+        gap: 8px;
+      }
+
+      body.exam-mode .meta {
+        font-size: 11px;
+      }
+
+      body.exam-mode .stem {
+        font-size: 15px;
+        line-height: 1.38;
+      }
+
+      body.exam-mode .question .grid {
+        gap: 7px;
+      }
+
+      body.exam-mode .option {
+        padding: 8px;
+        gap: 7px;
+        font-size: 14px;
+        line-height: 1.35;
+        border-radius: 6px;
+      }
+
+      body.exam-mode .answer-box {
+        padding: 8px;
+        font-size: 13px;
+        line-height: 1.38;
+      }
+
+      body.exam-mode .result-panel {
+        min-height: calc(100vh - 150px);
+        gap: 10px;
+        padding: 14px;
+      }
+
+      body.exam-mode .result-panel .score {
+        font-size: 46px;
+      }
     }
   </style>
 </head>
@@ -935,7 +1086,7 @@
             ` : ""}
           </div>
           <div class="grid">
-            <div class="card">
+            <div class="card progress-card">
               <h3>${exam.reviewing ? "解析进度" : "答题进度"}</h3>
               <div class="score">${exam.reviewing ? (exam.reviewIndex + 1) + "/" + questions.length : answered + "/" + questions.length}</div>
               ${exam.submitted ? `
@@ -947,7 +1098,7 @@
               ` : ""}
               <p class="hint">${exam.reviewing ? "当前解析会自动向后播放，最后一题会停住。" : "选完一题会自动跳到下一题。"}</p>
             </div>
-            <div class="card">
+            <div class="card sheet-card">
               <h3>答题卡</h3>
               <div class="sheet">
                 ${questions.map((_, i) => `<button class="${exam.answers[i] !== undefined ? "done" : ""} ${exam.index === i ? "current" : ""}" onclick="state.exam.index=${i};save()">${i + 1}</button>`).join("")}
@@ -959,6 +1110,7 @@
     }
 
     function render() {
+      document.body.classList.toggle("exam-mode", state.tab === "exam");
       renderChrome();
       const view = document.getElementById("view");
       view.innerHTML = {
