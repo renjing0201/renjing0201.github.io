@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>执业兽医资格考试学习系统</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #16211c;
+      --muted: #60706a;
+      --line: #dbe5df;
+      --paper: #fbfdfb;
+      --soft: #eef5f1;
+      --green: #1f7a4d;
+      --green-dark: #155b39;
+      --blue: #2667a6;
+      --amber: #a86615;
+      --red: #b23535;
+      --white: #fff;
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    button, input { font: inherit; }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(251, 253, 251, .96);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    .topbar {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 12px 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--green);
+      color: var(--white);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .sub {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .stats {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      background: var(--white);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .tab {
+      border: 1px solid var(--line);
+      background: var(--white);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 10px 8px;
+      cursor: pointer;
+      min-height: 42px;
+    }
+
+    .tab.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: var(--white);
+      font-weight: 700;
+    }
+
+    main {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 18px 16px 92px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    aside, .panel, .card, .question {
+      border: 1px solid var(--line);
+      background: var(--white);
+      border-radius: 8px;
+    }
+
+    aside {
+      position: sticky;
+      top: 112px;
+      padding: 12px;
+    }
+
+    .subject-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .subject {
+      border: 1px solid var(--line);
+      background: var(--soft);
+      border-radius: 8px;
+      padding: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .subject.active {
+      border-color: var(--green);
+      background: #e4f3ea;
+    }
+
+    .subject b {
+      display: block;
+      font-size: 14px;
+    }
+
+    .subject span {
+      color: var(--muted);
+      display: block;
+      font-size: 12px;
+      margin-top: 4px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      padding: 16px;
+      min-height: 560px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .hint {
+      color: var(--muted);
+      margin: 5px 0 0;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--white);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 9px 12px;
+      cursor: pointer;
+      min-height: 40px;
+    }
+
+    .btn.primary {
+      background: var(--green);
+      border-color: var(--green);
+      color: var(--white);
+      font-weight: 700;
+    }
+
+    .btn.warn {
+      border-color: #f1d49c;
+      background: #fff7e8;
+      color: var(--amber);
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card {
+      padding: 14px;
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .progress-line {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--soft);
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    .progress-line i {
+      display: block;
+      height: 100%;
+      width: var(--p);
+      background: var(--green);
+    }
+
+    .check-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: start;
+      border-top: 1px solid var(--line);
+      padding: 12px 0;
+    }
+
+    .check-row:first-child { border-top: 0; }
+    .check-row input { width: 18px; height: 18px; margin-top: 2px; }
+    .check-row small, .meta { color: var(--muted); line-height: 1.45; }
+
+    .badge {
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      background: var(--soft);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .badge.hot { background: #ffeceb; color: var(--red); }
+    .badge.good { background: #e4f3ea; color: var(--green-dark); }
+
+    .question {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .stem {
+      font-weight: 700;
+      line-height: 1.55;
+    }
+
+    .option {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 9px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      cursor: pointer;
+      background: var(--white);
+    }
+
+    .option.selected { border-color: var(--blue); background: #edf6ff; }
+    .option.correct { border-color: var(--green); background: #eaf7ef; }
+    .option.wrong { border-color: var(--red); background: #fff0f0; }
+
+    .answer-box {
+      border-left: 4px solid var(--green);
+      background: #f4faf6;
+      padding: 11px;
+      border-radius: 6px;
+      color: #244237;
+      line-height: 1.6;
+    }
+
+    .exam-grid {
+      display: grid;
+      grid-template-columns: 1fr 260px;
+      gap: 16px;
+    }
+
+    .sheet {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .sheet button {
+      aspect-ratio: 1;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+      cursor: pointer;
+    }
+
+    .sheet button.done { background: #e4f3ea; border-color: var(--green); }
+    .sheet button.current { outline: 2px solid var(--blue); }
+
+    .score {
+      font-size: 34px;
+      font-weight: 900;
+      color: var(--green);
+      line-height: 1.1;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 12px;
+      background: var(--white);
+    }
+
+    @media (max-width: 860px) {
+      .brand-row, .section-head { display: grid; }
+      .stats, .actions { justify-content: flex-start; }
+      nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .layout, .exam-grid, .grid.two { grid-template-columns: 1fr; }
+      aside { position: static; }
+      .subject-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      main { padding-bottom: 42px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="topbar">
+        <div class="brand-row">
+          <div class="brand">
+            <div class="mark">兽</div>
+            <div>
+              <h1>执业兽医资格考试学习系统</h1>
+              <p class="sub">基础、预防、临床、综合应用四科贯通：清单学习、专题练习、错题复现、真题模拟</p>
+            </div>
+          </div>
+          <div class="stats" id="stats"></div>
+        </div>
+        <nav id="tabs"></nav>
+      </div>
+    </header>
+    <main>
+      <div class="layout">
+        <aside>
+          <div class="subject-list" id="subjects"></div>
+        </aside>
+        <section class="panel" id="view"></section>
+      </div>
+    </main>
+    <footer>题库内容为可替换练习数据；正式备考请替换为本人合法取得的官方真题与授权解析。</footer>
+  </div>
+
+  <script>
+    const subjects = [
+      {
+        name: "基础科目",
+        desc: "法规、解剖、生理、病理、药理",
+        topics: [
+          ["执业兽医法律责任", "能区分执业、用药、处方、诊疗记录中的常见合规风险。"],
+          ["动物解剖与组织胚胎", "掌握消化、呼吸、泌尿、生殖、神经系统核心结构。"],
+          ["动物生理与生化", "理解体温、循环、呼吸、消化、内分泌调节机制。"],
+          ["动物病理学", "识别炎症、坏死、变性、肿瘤、休克等基础病理过程。"],
+          ["兽医药理学", "熟悉抗菌药、抗寄生虫药、麻醉镇痛药的作用与禁忌。"]
+        ]
+      },
+      {
+        name: "预防科目",
+        desc: "微生物、免疫、传染病、寄生虫、公共卫生",
+        topics: [
+          ["兽医微生物与免疫", "掌握病原分类、免疫应答、疫苗免疫与实验诊断。"],
+          ["动物传染病学", "熟悉高发传染病的病原、流行病学、诊断和防控。"],
+          ["兽医寄生虫学", "掌握常见寄生虫生活史、诊断、治疗和预防。"],
+          ["兽医公共卫生", "覆盖人畜共患病、检疫、屠宰卫生和无害化处理。"],
+          ["重大动物疫病防控", "能判断报告、隔离、扑杀、消毒、免疫等处置顺序。"]
+        ]
+      },
+      {
+        name: "临床科目",
+        desc: "诊断、内科、外科、产科、中兽医",
+        topics: [
+          ["兽医临床诊断", "掌握问诊、视诊、触诊、叩诊、听诊及实验室检查逻辑。"],
+          ["兽医内科学", "能处理消化、呼吸、循环、泌尿、营养代谢类病例。"],
+          ["兽医外科与手术", "掌握无菌、麻醉、止血、缝合、创伤和常见手术原则。"],
+          ["兽医产科学", "识别难产、产后疾病、繁殖障碍和新生动物问题。"],
+          ["中兽医学", "理解辨证、方药、针灸与常见证型处理。"]
+        ]
+      },
+      {
+        name: "综合应用科目",
+        desc: "猪、禽、牛羊、犬猫病例综合判断",
+        topics: [
+          ["猪病综合诊疗", "围绕腹泻、呼吸、繁殖、免疫失败等病例做鉴别诊断。"],
+          ["禽病综合诊疗", "训练鸡鸭鹅高发病的剖检、流行特点和防控方案。"],
+          ["牛羊病综合诊疗", "掌握反刍动物代谢病、传染病、寄生虫病和产科问题。"],
+          ["犬猫病综合诊疗", "处理呕吐腹泻、皮肤病、泌尿、生殖、传染病病例。"],
+          ["病例处置流程", "从主诉到检查、诊断、治疗、预后、复盘形成闭环。"]
+        ]
+      }
+    ];
+
+    const questions = [
+      {
+        subject: "基础科目", topic: "兽医药理学",
+        stem: "治疗细菌感染时，联合用药最需要首先考虑的是哪一项？",
+        options: ["药物颜色是否一致", "抗菌谱、作用机制和不良反应是否互补", "是否都能加入饮水", "包装规格是否相同"],
+        answer: 1,
+        explain: "联合用药应围绕病原、药代动力学、作用机制和毒副作用判断，避免拮抗和重复毒性。"
+      },
+      {
+        subject: "预防科目", topic: "兽医公共卫生",
+        stem: "发现疑似狂犬病动物时，最恰当的处置思路是？",
+        options: ["自行观察数日后再报告", "立即隔离并按规定报告和处置", "先使用普通抗菌药治疗", "直接进入市场销售"],
+        answer: 1,
+        explain: "狂犬病属于重要人畜共患病，疑似病例应隔离、报告，并按法规和防疫规范处置。"
+      },
+      {
+        subject: "临床科目", topic: "兽医外科与手术",
+        stem: "外科手术前建立无菌区的核心目的是什么？",
+        options: ["缩短手术记录", "降低术野污染和感染风险", "减少麻醉用药", "便于术后收费"],
+        answer: 1,
+        explain: "无菌操作的核心是控制微生物污染，降低术后感染、创口裂开和继发并发症。"
+      },
+      {
+        subject: "综合应用科目", topic: "犬猫病综合诊疗",
+        stem: "犬出现呕吐、腹泻、精神沉郁时，病例分析首先应补充哪类信息？",
+        options: ["主人职业", "疫苗史、饮食史、体温和脱水情况", "犬舍颜色", "牵引绳品牌"],
+        answer: 1,
+        explain: "综合应用题重在病例信息整合，疫苗、饮食、体征和脱水程度会直接影响鉴别诊断与处理。"
+      },
+      {
+        subject: "预防科目", topic: "动物传染病学",
+        stem: "群体性发病调查中，最能帮助判断传染病传播特点的是？",
+        options: ["发病时间、空间分布和接触史", "饲养员年龄", "圈舍门牌号", "治疗账单编号"],
+        answer: 0,
+        explain: "流行病学三间分布和接触史是判断传染源、传播途径、易感群体的关键线索。"
+      }
+    ];
+
+    const tabs = [
+      ["checklist", "知识点清单"],
+      ["practice", "专题练习"],
+      ["wrongbook", "错题复现"],
+      ["exam", "真题模拟"]
+    ];
+
+    const storeKey = "vetExamPagesState.v1";
+    let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
+    state.tab ||= "checklist";
+    state.subject ||= subjects[0].name;
+    state.checked ||= {};
+    state.answers ||= {};
+    state.wrong ||= {};
+    state.exam ||= { index: 0, answers: {}, submitted: false, startedAt: Date.now(), duration: 45 * 60 };
+
+    function save() {
+      localStorage.setItem(storeKey, JSON.stringify(state));
+      render();
+    }
+
+    function currentSubject() {
+      return subjects.find(s => s.name === state.subject) || subjects[0];
+    }
+
+    function subjectQuestions(name = state.subject) {
+      return questions.filter(q => q.subject === name);
+    }
+
+    function doneCount() {
+      return Object.values(state.checked).filter(Boolean).length;
+    }
+
+    function totalTopics() {
+      return subjects.reduce((sum, s) => sum + s.topics.length, 0);
+    }
+
+    function wrongList() {
+      return Object.entries(state.wrong)
+        .map(([id, item]) => ({ id: Number(id), ...item, q: questions[Number(id)] }))
+        .filter(item => item.q)
+        .sort((a, b) => b.count - a.count);
+    }
+
+    function setTab(tab) {
+      state.tab = tab;
+      save();
+    }
+
+    function setSubject(name) {
+      state.subject = name;
+      save();
+    }
+
+    function answerQuestion(index, choice) {
+      state.answers[index] = choice;
+      if (choice !== questions[index].answer) {
+        const old = state.wrong[index] || { count: 0, last: 0 };
+        state.wrong[index] = { count: old.count + 1, last: Date.now() };
+      }
+      save();
+    }
+
+    function answerExam(choice) {
+      state.exam.answers[state.exam.index] = choice;
+      save();
+    }
+
+    function submitExam() {
+      state.exam.submitted = true;
+      questions.forEach((q, index) => {
+        if (state.exam.answers[index] !== q.answer) {
+          const old = state.wrong[index] || { count: 0, last: 0 };
+          state.wrong[index] = { count: old.count + 1, last: Date.now() };
+        }
+      });
+      save();
+    }
+
+    function resetExam() {
+      state.exam = { index: 0, answers: {}, submitted: false, startedAt: Date.now(), duration: 45 * 60 };
+      save();
+    }
+
+    function renderChrome() {
+      document.getElementById("stats").innerHTML = `
+        <span class="pill">清单 ${doneCount()}/${totalTopics()}</span>
+        <span class="pill">错题 ${wrongList().length} 题</span>
+        <span class="pill">手机可用</span>
+      `;
+
+      document.getElementById("tabs").innerHTML = tabs.map(([id, label]) => `
+        <button class="tab ${state.tab === id ? "active" : ""}" onclick="setTab('${id}')">${label}</button>
+      `).join("");
+
+      document.getElementById("subjects").innerHTML = subjects.map(subject => {
+        const total = subject.topics.length;
+        const checked = subject.topics.filter(t => state.checked[subject.name + ":" + t[0]]).length;
+        return `
+          <button class="subject ${state.subject === subject.name ? "active" : ""}" onclick="setSubject('${subject.name}')">
+            <b>${subject.name}</b>
+            <span>${subject.desc}</span>
+            <div class="progress-line" style="--p:${Math.round(checked / total * 100)}%"><i></i></div>
+            <span>${checked}/${total} 已掌握</span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function renderChecklist() {
+      const subject = currentSubject();
+      return `
+        <div class="section-head">
+          <div>
+            <h2>${subject.name}知识点清单</h2>
+            <p class="hint">先把每个知识点按“能讲出来、能做题、能举例”三步过一遍，再进入专题练习。</p>
+          </div>
+          <div class="actions"><button class="btn primary" onclick="setTab('practice')">开始专题练习</button></div>
+        </div>
+        <div class="card">
+          ${subject.topics.map(([title, desc]) => {
+            const key = subject.name + ":" + title;
+            return `
+              <label class="check-row">
+                <input type="checkbox" ${state.checked[key] ? "checked" : ""} onchange="state.checked['${key}']=this.checked;save()">
+                <span><b>${title}</b><br><small>${desc}</small></span>
+                <span class="badge ${state.checked[key] ? "good" : ""}">${state.checked[key] ? "已掌握" : "待学习"}</span>
+              </label>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderPractice() {
+      const list = subjectQuestions();
+      return `
+        <div class="section-head">
+          <div>
+            <h2>${state.subject}专题练习</h2>
+            <p class="hint">每题作答后立即看解析，错题会自动进入错题本，后面按高频程度复现。</p>
+          </div>
+          <div class="actions"><button class="btn" onclick="setTab('wrongbook')">查看错题</button></div>
+        </div>
+        <div class="grid">
+          ${list.map(q => {
+            const index = questions.indexOf(q);
+            const picked = state.answers[index];
+            return questionHtml(q, index, picked, picked !== undefined, "answerQuestion");
+          }).join("") || `<div class="card">该科目暂未放入练习题，替换正式题库后会自动显示。</div>`}
+        </div>
+      `;
+    }
+
+    function questionHtml(q, index, picked, showAnswer, handler) {
+      return `
+        <article class="question">
+          <div class="meta">${q.subject} · ${q.topic}</div>
+          <div class="stem">${index + 1}. ${q.stem}</div>
+          <div class="grid">
+            ${q.options.map((op, i) => {
+              const cls = picked === i ? "selected" : "";
+              const reveal = showAnswer ? (i === q.answer ? " correct" : picked === i && picked !== q.answer ? " wrong" : "") : "";
+              return `<button class="option ${cls}${reveal}" onclick="${handler}(${index},${i})"><b>${"ABCD"[i]}</b><span>${op}</span></button>`;
+            }).join("")}
+          </div>
+          ${showAnswer ? `<div class="answer-box">参考答案：${"ABCD"[q.answer]}。${q.explain}</div>` : ""}
+        </article>
+      `;
+    }
+
+    function renderWrongBook() {
+      const list = wrongList();
+      return `
+        <div class="section-head">
+          <div>
+            <h2>错题复现</h2>
+            <p class="hint">错题按出现次数排序，高频题优先复习；建议当天、3天、7天各复现一次。</p>
+          </div>
+          <div class="actions"><button class="btn warn" onclick="state.wrong={};save()">清空错题本</button></div>
+        </div>
+        <div class="grid">
+          ${list.map(item => `
+            <div class="card">
+              <div class="section-head">
+                <div>
+                  <h3>${item.q.subject} · ${item.q.topic}</h3>
+                  <p class="hint">${item.q.stem}</p>
+                </div>
+                <span class="badge ${item.count >= 2 ? "hot" : ""}">${item.count >= 2 ? "高频错题" : "错题"} ${item.count} 次</span>
+              </div>
+              <div class="answer-box">答案：${"ABCD"[item.q.answer]}。${item.q.explain}</div>
+            </div>
+          `).join("") || `<div class="card">目前还没有错题。先做专题练习或真题模拟，错题会自动汇总到这里。</div>`}
+        </div>
+      `;
+    }
+
+    function renderExam() {
+      const exam = state.exam;
+      const q = questions[exam.index];
+      const answered = Object.keys(exam.answers).length;
+      const score = questions.filter((item, index) => exam.answers[index] === item.answer).length;
+      return `
+        <div class="section-head">
+          <div>
+            <h2>真题模拟测试</h2>
+            <p class="hint">模拟限时作答、交卷计分、查看解析。当前为练习数据，正式使用时替换为近五年真题。</p>
+          </div>
+          <div class="actions">
+            <button class="btn" onclick="resetExam()">重新开始</button>
+            <button class="btn primary" onclick="submitExam()">交卷计分</button>
+          </div>
+        </div>
+        <div class="exam-grid">
+          <div>${questionHtml(q, exam.index, exam.answers[exam.index], exam.submitted, "answerExam")}</div>
+          <div class="grid">
+            <div class="card">
+              <h3>答题进度</h3>
+              <div class="score">${exam.submitted ? score + "/" + questions.length : answered + "/" + questions.length}</div>
+              <p class="hint">${exam.submitted ? "已交卷，可回看解析并整理错题。" : "完成后点击交卷计分。"}</p>
+            </div>
+            <div class="card">
+              <h3>答题卡</h3>
+              <div class="sheet">
+                ${questions.map((_, i) => `<button class="${exam.answers[i] !== undefined ? "done" : ""} ${exam.index === i ? "current" : ""}" onclick="state.exam.index=${i};save()">${i + 1}</button>`).join("")}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function render() {
+      renderChrome();
+      const view = document.getElementById("view");
+      view.innerHTML = {
+        checklist: renderChecklist,
+        practice: renderPractice,
+        wrongbook: renderWrongBook,
+        exam: renderExam
+      }[state.tab]();
+    }
+
+    render();
+  </script>
+</body>
+</html>
