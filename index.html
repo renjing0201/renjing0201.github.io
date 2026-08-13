@@ -369,6 +369,23 @@
       line-height: 1.1;
     }
 
+    .score-note {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .score-note span {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
     footer {
       border-top: 1px solid var(--line);
       color: var(--muted);
@@ -467,11 +484,60 @@
 
     const questions = [
       {
+        subject: "基础科目", topic: "执业兽医法律责任",
+        stem: "执业兽医出具诊疗记录时，最应保证的是哪一项？",
+        options: ["记录完整、真实、可追溯", "只记录收费项目", "只写药品商品名", "由畜主自行补写"],
+        answer: 0,
+        explain: "诊疗记录是执业行为和医疗质量的重要凭证，应真实、完整、规范并可追溯。"
+      },
+      {
+        subject: "基础科目", topic: "动物解剖与组织胚胎",
+        stem: "反刍动物瘤胃的主要功能是？",
+        options: ["分泌胆汁", "微生物发酵和粗纤维消化", "产生红细胞", "完成尿液浓缩"],
+        answer: 1,
+        explain: "瘤胃内微生物参与纤维素发酵，产生挥发性脂肪酸，是反刍动物能量利用的核心。"
+      },
+      {
+        subject: "基础科目", topic: "动物生理与生化",
+        stem: "动物体温调节中，位于中枢调控关键位置的是？",
+        options: ["下丘脑", "脾脏", "胰腺", "肾小球"],
+        answer: 0,
+        explain: "下丘脑是体温调节中枢，整合外周和中枢温度信息并调节产热、散热。"
+      },
+      {
+        subject: "基础科目", topic: "动物病理学",
+        stem: "急性炎症局部典型表现通常包括？",
+        options: ["红、肿、热、痛和功能障碍", "永久无痛性萎缩", "只出现色素沉着", "仅有组织钙化"],
+        answer: 0,
+        explain: "急性炎症因血管扩张、渗出和炎性介质作用，常出现红肿热痛及功能障碍。"
+      },
+      {
         subject: "基础科目", topic: "兽医药理学",
         stem: "治疗细菌感染时，联合用药最需要首先考虑的是哪一项？",
         options: ["药物颜色是否一致", "抗菌谱、作用机制和不良反应是否互补", "是否都能加入饮水", "包装规格是否相同"],
         answer: 1,
         explain: "联合用药应围绕病原、药代动力学、作用机制和毒副作用判断，避免拮抗和重复毒性。"
+      },
+      {
+        subject: "预防科目", topic: "兽医微生物与免疫",
+        stem: "疫苗免疫后产生保护效果，主要依赖机体形成哪类能力？",
+        options: ["免疫记忆和特异性应答", "立即消除所有病原", "永久停止代谢", "改变动物品种"],
+        answer: 0,
+        explain: "疫苗通过模拟抗原刺激形成特异性免疫和免疫记忆，降低感染或发病风险。"
+      },
+      {
+        subject: "预防科目", topic: "动物传染病学",
+        stem: "群体性发病调查中，最能帮助判断传染病传播特点的是？",
+        options: ["发病时间、空间分布和接触史", "饲养员年龄", "圈舍门牌号", "治疗账单编号"],
+        answer: 0,
+        explain: "流行病学三间分布和接触史是判断传染源、传播途径、易感群体的关键线索。"
+      },
+      {
+        subject: "预防科目", topic: "兽医寄生虫学",
+        stem: "控制寄生虫病复发时，除了治疗患病动物，还应重点关注什么？",
+        options: ["环境和中间宿主管理", "更换项圈颜色", "减少病例记录", "停止饮水"],
+        answer: 0,
+        explain: "许多寄生虫有复杂生活史，环境、媒介和中间宿主控制是减少再感染的关键。"
       },
       {
         subject: "预防科目", topic: "兽医公共卫生",
@@ -481,11 +547,67 @@
         explain: "狂犬病属于重要人畜共患病，疑似病例应隔离、报告，并按法规和防疫规范处置。"
       },
       {
+        subject: "预防科目", topic: "重大动物疫病防控",
+        stem: "重大动物疫病现场处置中，最不应忽略的是？",
+        options: ["报告、隔离、消毒和流行病学调查", "先隐瞒发病数量", "只观察不记录", "让病畜自由流动"],
+        answer: 0,
+        explain: "重大动物疫病强调快速报告、隔离控制、消毒灭源和流调追踪，防止扩散。"
+      },
+      {
+        subject: "临床科目", topic: "兽医临床诊断",
+        stem: "临床接诊时，病史采集首先要围绕哪一项展开？",
+        options: ["主诉、发病经过和饲养管理变化", "诊室装修风格", "畜主是否熟悉网络", "药品摆放位置"],
+        answer: 0,
+        explain: "主诉、病程、饲养管理和既往处理能帮助建立初步诊断方向。"
+      },
+      {
+        subject: "临床科目", topic: "兽医内科学",
+        stem: "严重腹泻动物出现眼窝凹陷、皮肤弹性下降，首先提示？",
+        options: ["脱水", "骨折", "听力下降", "毛色改变"],
+        answer: 0,
+        explain: "眼窝凹陷、皮肤弹性下降和黏膜干燥是脱水的重要体征，应评估补液方案。"
+      },
+      {
         subject: "临床科目", topic: "兽医外科与手术",
         stem: "外科手术前建立无菌区的核心目的是什么？",
         options: ["缩短手术记录", "降低术野污染和感染风险", "减少麻醉用药", "便于术后收费"],
         answer: 1,
         explain: "无菌操作的核心是控制微生物污染，降低术后感染、创口裂开和继发并发症。"
+      },
+      {
+        subject: "临床科目", topic: "兽医产科学",
+        stem: "母畜难产处理中，最先需要评估的是？",
+        options: ["胎向、胎位、胎势和产道情况", "畜主付款方式", "圈舍门锁", "饲料包装"],
+        answer: 0,
+        explain: "难产判断应先评估胎儿与产道条件，再决定助产、矫正或手术方案。"
+      },
+      {
+        subject: "临床科目", topic: "中兽医学",
+        stem: "中兽医辨证时，最核心的思路是？",
+        options: ["根据证候整体判断治法", "只看动物体重", "只按病名固定用药", "完全不看症状"],
+        answer: 0,
+        explain: "辨证论治强调综合症状、体征和病机，先辨证再立法处方。"
+      },
+      {
+        subject: "综合应用科目", topic: "猪病综合诊疗",
+        stem: "猪群出现咳嗽、发热、采食下降时，综合题首先应分析？",
+        options: ["日龄、免疫史、发病率和病死率", "耳标颜色", "饲养员姓名笔画", "栏舍编号是否好看"],
+        answer: 0,
+        explain: "猪群病例要先抓群体流行特征和免疫背景，再结合症状、剖检和实验室结果判断。"
+      },
+      {
+        subject: "综合应用科目", topic: "禽病综合诊疗",
+        stem: "鸡群呼吸道症状伴产蛋下降时，最需要结合判断的是？",
+        options: ["免疫程序、剖检变化和病原检测", "蛋托颜色", "饲料袋字体", "鸡舍门朝向"],
+        answer: 0,
+        explain: "禽病综合诊断要结合群体症状、免疫程序、剖检和实验室检测，避免只凭单一表现下结论。"
+      },
+      {
+        subject: "综合应用科目", topic: "牛羊病综合诊疗",
+        stem: "奶牛产后食欲差、酮味明显、产奶下降时，应优先考虑哪类问题？",
+        options: ["营养代谢病", "单纯外伤", "羽毛脱落", "听觉训练不足"],
+        answer: 0,
+        explain: "产后高产奶牛易发生能量负平衡，酮病等营养代谢病需重点鉴别。"
       },
       {
         subject: "综合应用科目", topic: "犬猫病综合诊疗",
@@ -495,11 +617,11 @@
         explain: "综合应用题重在病例信息整合，疫苗、饮食、体征和脱水程度会直接影响鉴别诊断与处理。"
       },
       {
-        subject: "预防科目", topic: "动物传染病学",
-        stem: "群体性发病调查中，最能帮助判断传染病传播特点的是？",
-        options: ["发病时间、空间分布和接触史", "饲养员年龄", "圈舍门牌号", "治疗账单编号"],
+        subject: "综合应用科目", topic: "病例处置流程",
+        stem: "综合病例题中，形成诊疗闭环最合理的顺序是？",
+        options: ["主诉采集、检查、诊断、治疗、复盘", "先用药再询问病史", "只看一项指标就下结论", "不记录治疗结果"],
         answer: 0,
-        explain: "流行病学三间分布和接触史是判断传染源、传播途径、易感群体的关键线索。"
+        explain: "病例综合能力强调信息采集、检查验证、诊断决策、治疗执行和结果复盘的完整链条。"
       }
     ];
 
@@ -510,7 +632,7 @@
       ["exam", "真题模拟"]
     ];
 
-    const storeKey = "vetExamPagesState.v1";
+    const storeKey = "vetExamPagesState.v2";
     let state = JSON.parse(localStorage.getItem(storeKey) || "{}");
     state.tab ||= "checklist";
     state.subject ||= subjects[0].name;
@@ -706,6 +828,8 @@
       const q = questions[exam.index];
       const answered = Object.keys(exam.answers).length;
       const score = questions.filter((item, index) => exam.answers[index] === item.answer).length;
+      const percent = Math.round(score / questions.length * 100);
+      const unanswered = questions.length - answered;
       return `
         <div class="section-head">
           <div>
@@ -722,8 +846,15 @@
           <div class="grid">
             <div class="card">
               <h3>答题进度</h3>
-              <div class="score">${exam.submitted ? score + "/" + questions.length : answered + "/" + questions.length}</div>
-              <p class="hint">${exam.submitted ? "已交卷，可回看解析并整理错题。" : "完成后点击交卷计分。"}</p>
+              <div class="score">${exam.submitted ? percent + "分" : answered + "/" + questions.length}</div>
+              ${exam.submitted ? `
+                <div class="score-note">
+                  <span>答对 ${score}</span>
+                  <span>错题 ${questions.length - score - unanswered}</span>
+                  <span>未答 ${unanswered}</span>
+                </div>
+              ` : ""}
+              <p class="hint">${exam.submitted ? "已交卷，右侧答题卡可逐题回看解析，错题已自动进入错题本。" : "完成后点击交卷计分。"}</p>
             </div>
             <div class="card">
               <h3>答题卡</h3>
